@@ -156,6 +156,9 @@ export default {
     const url = new URL(request.url);
 
     if (request.method === "GET") {
+      if (url.pathname === "/app") {
+        return html(miniAppHtml());
+      }
       if (url.pathname === "/admin/set-webhook") {
         return handleSetWebhook(url, env);
       }
@@ -170,6 +173,10 @@ export default {
         service: "residualmap-bot",
         time: new Date().toISOString()
       });
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/app-data") {
+      return handleMiniAppData(request, env);
     }
 
     if (request.method !== "POST") {
@@ -242,6 +249,48 @@ async function handleDeleteWebhook(url, env) {
   });
   const data = await response.json().catch(() => ({}));
   return json({ ok: response.ok && data.ok === true, telegram: data }, { status: response.ok ? 200 : 502 });
+}
+
+async function handleMiniAppData(request, env) {
+  const body = await request.json().catch(() => null);
+  if (!body || typeof body.initData !== "string") {
+    return json({ ok: false, error: "Mini App init data is required" }, { status: 401 });
+  }
+
+  const validation = await validateTelegramInitData(body.initData, env.TELEGRAM_BOT_TOKEN);
+  if (!validation.ok) {
+    return json({ ok: false, error: validation.error }, { status: 401 });
+  }
+
+  const telegramUserId = String(validation.user.id);
+  if (!isAllowed(env, telegramUserId)) {
+    return json({ ok: false, error: "Access denied" }, { status: 403 });
+  }
+
+  const user = await upsertUser(env, validation.user);
+  const period = normalizePeriod(body.period);
+  const bounds = periodBounds(period, user.timezone);
+  const summary = await buildSummary(env, user.id, bounds);
+  const recent = await listTransactions(env, user.id, "active", 20);
+  const deleted = await listTransactions(env, user.id, "deleted", 10);
+  const debts = await buildDebts(env, user.id);
+
+  return json({
+    ok: true,
+    user: {
+      id: user.id,
+      telegram_user_id: user.telegram_user_id,
+      username: user.username,
+      first_name: user.first_name,
+      currency: user.currency,
+      timezone: user.timezone
+    },
+    period,
+    summary,
+    recent,
+    deleted,
+    debts
+  });
 }
 
 function requireSetupToken(url, env) {
@@ -381,6 +430,11 @@ async function handleCommand(env, context) {
     return;
   }
 
+  if (command === "/app" || command === "/analytics") {
+    await sendMiniAppLink(env, chatId);
+    return;
+  }
+
   if (command === "/today") {
     await handleAnalytics(env, { chatId, user, period: "today", originalText: text, useAi: false });
     return;
@@ -442,6 +496,7 @@ function helpText(user) {
     "<code>сколько потратил за неделю?</code>",
     "",
     "Команды:",
+    "/app - открыть аналитику",
     "/today - сегодня",
     "/week - текущая неделя",
     "/month - текущий месяц",
@@ -690,6 +745,26 @@ function formatTransactionCreated(row) {
   return lines.join("\n");
 }
 
+async function sendMiniAppLink(env, chatId) {
+  const appUrl = getMiniAppUrl(env);
+  await sendMessage(env, chatId, "Открыть панель аналитики:", {
+    reply_markup: {
+      inline_keyboard: [
+        [
+          {
+            text: "Открыть аналитику",
+            web_app: { url: appUrl }
+          }
+        ]
+      ]
+    }
+  });
+}
+
+function getMiniAppUrl(env) {
+  return env.MINI_APP_URL || "https://residualmap-bot.residualmap.workers.dev/app";
+}
+
 async function handleAnalytics(env, { chatId, user, period, originalText, useAi }) {
   const bounds = periodBounds(period, user.timezone);
   const summary = await buildSummary(env, user.id, bounds);
@@ -842,27 +917,7 @@ async function enhanceAnalytics(env, summary, originalText) {
 }
 
 async function handleDebts(env, chatId, user) {
-  const rows = await env.DB.prepare(
-    `SELECT
-      COALESCE(counterparty, 'не указано') AS counterparty,
-      currency,
-      COALESCE(SUM(CASE
-        WHEN kind = 'loan_out' THEN amount_minor
-        WHEN kind = 'loan_repayment' THEN -amount_minor
-        ELSE 0 END), 0) AS receivable_minor,
-      COALESCE(SUM(CASE
-        WHEN kind = 'borrow_in' THEN amount_minor
-        WHEN kind = 'borrow_repayment' THEN -amount_minor
-        ELSE 0 END), 0) AS payable_minor
-    FROM transactions
-    WHERE user_id = ? AND status = 'active' AND kind IN ('loan_out', 'loan_repayment', 'borrow_in', 'borrow_repayment')
-    GROUP BY counterparty, currency
-    ORDER BY counterparty, currency`
-  )
-    .bind(user.id)
-    .all();
-
-  const open = (rows.results || []).filter((row) => row.receivable_minor !== 0 || row.payable_minor !== 0);
+  const open = await buildDebts(env, user.id);
   if (!open.length) {
     await sendMessage(env, chatId, "Открытых долгов нет.");
     return;
@@ -880,6 +935,45 @@ async function handleDebts(env, chatId, user) {
   await sendMessage(env, chatId, lines.join("\n"));
 }
 
+async function buildDebts(env, userId) {
+  const rows = await env.DB.prepare(
+    `SELECT
+      COALESCE(counterparty, 'не указано') AS counterparty,
+      currency,
+      COALESCE(SUM(CASE
+        WHEN kind = 'loan_out' THEN amount_minor
+        WHEN kind = 'loan_repayment' THEN -amount_minor
+        ELSE 0 END), 0) AS receivable_minor,
+      COALESCE(SUM(CASE
+        WHEN kind = 'borrow_in' THEN amount_minor
+        WHEN kind = 'borrow_repayment' THEN -amount_minor
+        ELSE 0 END), 0) AS payable_minor
+    FROM transactions
+    WHERE user_id = ? AND status = 'active' AND kind IN ('loan_out', 'loan_repayment', 'borrow_in', 'borrow_repayment')
+    GROUP BY counterparty, currency
+    ORDER BY counterparty, currency`
+  )
+    .bind(userId)
+    .all();
+
+  return (rows.results || []).filter((row) => row.receivable_minor !== 0 || row.payable_minor !== 0);
+}
+
+async function listTransactions(env, userId, status, limit) {
+  const safeStatus = status === "deleted" ? "deleted" : "active";
+  const safeLimit = Number.isInteger(limit) && limit > 0 ? Math.min(limit, 50) : 10;
+  const rows = await env.DB.prepare(
+    `SELECT id, local_date, kind, amount_minor, currency, category, subcategory, counterparty, description, raw_text, status, created_at, updated_at
+    FROM transactions
+    WHERE user_id = ? AND status = ?
+    ORDER BY id DESC
+    LIMIT ?`
+  )
+    .bind(userId, safeStatus, safeLimit)
+    .all();
+  return rows.results || [];
+}
+
 async function handleLast(env, chatId, user, arg) {
   const normalizedArg = String(arg || "").trim().toLowerCase();
   const showDeleted = ["deleted", "delete", "удаленные", "удалённые", "удалено"].includes(normalizedArg);
@@ -887,17 +981,7 @@ async function handleLast(env, chatId, user, arg) {
   const limit = Number.isInteger(limitFromArg) && limitFromArg > 0 ? Math.min(limitFromArg, 20) : 10;
   const status = showDeleted ? "deleted" : "active";
 
-  const rows = await env.DB.prepare(
-    `SELECT id, local_date, kind, amount_minor, currency, category, subcategory, counterparty, description, status
-    FROM transactions
-    WHERE user_id = ? AND status = ?
-    ORDER BY id DESC
-    LIMIT ?`
-  )
-    .bind(user.id, status, limit)
-    .all();
-
-  const items = rows.results || [];
+  const items = await listTransactions(env, user.id, status, limit);
   if (!items.length) {
     await sendMessage(env, chatId, showDeleted ? "Удаленных записей пока нет." : "Активных записей пока нет.");
     return;
@@ -1185,7 +1269,7 @@ function extractOutputText(data) {
   throw new Error("No output text in OpenAI response");
 }
 
-async function sendMessage(env, chatId, text) {
+async function sendMessage(env, chatId, text, options = {}) {
   const chunks = splitTelegramText(text);
   for (const chunk of chunks) {
     const response = await fetch(`${TELEGRAM_API}${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
@@ -1195,7 +1279,8 @@ async function sendMessage(env, chatId, text) {
         chat_id: chatId,
         text: chunk,
         parse_mode: "HTML",
-        disable_web_page_preview: true
+        disable_web_page_preview: true,
+        ...options
       })
     });
     if (!response.ok) {
@@ -1225,6 +1310,12 @@ function isAllowed(env, telegramUserId) {
     .map((id) => id.trim())
     .filter(Boolean);
   return ids.includes(telegramUserId);
+}
+
+function normalizePeriod(period) {
+  const value = String(period || "month");
+  if (["today", "yesterday", "week", "month", "last_7_days"].includes(value)) return value;
+  return "month";
 }
 
 function periodBounds(period, timezone) {
@@ -1370,4 +1461,443 @@ function json(payload, init = {}) {
       ...(init.headers || {})
     }
   });
+}
+
+function html(markup, init = {}) {
+  return new Response(markup, {
+    ...init,
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "no-store",
+      ...(init.headers || {})
+    }
+  });
+}
+
+async function validateTelegramInitData(initData, botToken) {
+  if (!botToken) return { ok: false, error: "TELEGRAM_BOT_TOKEN is not configured" };
+
+  const params = new URLSearchParams(initData);
+  const hash = params.get("hash");
+  if (!hash) return { ok: false, error: "Telegram hash is missing" };
+
+  params.delete("hash");
+  const authDate = Number(params.get("auth_date") || 0);
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  if (!authDate || nowSeconds - authDate > 86400) {
+    return { ok: false, error: "Telegram init data expired" };
+  }
+
+  const pairs = [];
+  for (const [key, value] of params.entries()) {
+    pairs.push(`${key}=${value}`);
+  }
+  pairs.sort();
+
+  const dataCheckString = pairs.join("\n");
+  const secretKey = await hmacSha256("WebAppData", botToken);
+  const calculatedHash = toHex(await hmacSha256(secretKey, dataCheckString));
+  if (!timingSafeEqualHex(calculatedHash, hash)) {
+    return { ok: false, error: "Telegram init data is invalid" };
+  }
+
+  const userRaw = params.get("user");
+  if (!userRaw) return { ok: false, error: "Telegram user is missing" };
+
+  const user = JSON.parse(userRaw);
+  if (!user || !user.id) return { ok: false, error: "Telegram user is invalid" };
+  return { ok: true, user };
+}
+
+async function hmacSha256(key, data) {
+  const encoder = new TextEncoder();
+  const keyBytes = typeof key === "string" ? encoder.encode(key) : key;
+  const cryptoKey = await crypto.subtle.importKey(
+    "raw",
+    keyBytes,
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  return new Uint8Array(await crypto.subtle.sign("HMAC", cryptoKey, encoder.encode(data)));
+}
+
+function toHex(bytes) {
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function timingSafeEqualHex(a, b) {
+  const left = String(a || "").toLowerCase();
+  const right = String(b || "").toLowerCase();
+  if (left.length !== right.length) return false;
+  let diff = 0;
+  for (let index = 0; index < left.length; index += 1) {
+    diff |= left.charCodeAt(index) ^ right.charCodeAt(index);
+  }
+  return diff === 0;
+}
+
+function miniAppHtml() {
+  return `<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>ResidualMap</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: var(--tg-theme-bg-color, #f6f7f9);
+      --surface: var(--tg-theme-secondary-bg-color, #ffffff);
+      --text: var(--tg-theme-text-color, #17212b);
+      --muted: var(--tg-theme-hint-color, #667085);
+      --accent: var(--tg-theme-button-color, #2f80ed);
+      --accent-text: var(--tg-theme-button-text-color, #ffffff);
+      --line: rgba(120, 132, 150, 0.22);
+      --green: #2e9f67;
+      --rose: #d94f70;
+      --amber: #c98212;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font: 15px/1.42 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--text);
+      background: var(--bg);
+    }
+    .app {
+      width: min(960px, 100%);
+      margin: 0 auto;
+      padding: 16px 14px 28px;
+    }
+    header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+    h1 {
+      margin: 0;
+      font-size: 24px;
+      line-height: 1.1;
+      letter-spacing: 0;
+    }
+    .sub {
+      margin-top: 5px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .periods {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 7px;
+      margin: 14px 0;
+    }
+    button {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 9px 8px;
+      background: var(--surface);
+      color: var(--text);
+      font: inherit;
+      min-height: 40px;
+    }
+    button.active {
+      border-color: var(--accent);
+      background: var(--accent);
+      color: var(--accent-text);
+      font-weight: 650;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+    }
+    .panel h2 {
+      margin: 0 0 10px;
+      font-size: 15px;
+      letter-spacing: 0;
+    }
+    .kpis {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 9px;
+      margin-bottom: 10px;
+    }
+    .kpi {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px;
+      min-width: 0;
+    }
+    .label {
+      color: var(--muted);
+      font-size: 12px;
+      margin-bottom: 4px;
+    }
+    .value {
+      font-size: 18px;
+      font-weight: 720;
+      overflow-wrap: anywhere;
+    }
+    .bar-row {
+      display: grid;
+      grid-template-columns: 74px 1fr auto;
+      align-items: center;
+      gap: 9px;
+      margin: 9px 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .bar {
+      height: 9px;
+      border-radius: 999px;
+      background: rgba(120, 132, 150, 0.18);
+      overflow: hidden;
+    }
+    .fill {
+      height: 100%;
+      min-width: 2px;
+      border-radius: inherit;
+      background: linear-gradient(90deg, var(--accent), var(--green));
+    }
+    .list {
+      display: grid;
+      gap: 8px;
+    }
+    .row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      padding: 9px 0;
+      border-top: 1px solid var(--line);
+    }
+    .row:first-child { border-top: 0; padding-top: 0; }
+    .title { font-weight: 650; overflow-wrap: anywhere; }
+    .meta { color: var(--muted); font-size: 12px; margin-top: 2px; overflow-wrap: anywhere; }
+    .amount { font-weight: 720; white-space: nowrap; }
+    .expense { color: var(--rose); }
+    .income { color: var(--green); }
+    .debt { color: var(--amber); }
+    .empty, .error {
+      color: var(--muted);
+      padding: 18px 8px;
+      text-align: center;
+    }
+    .error { color: var(--rose); }
+    @media (max-width: 720px) {
+      .grid { grid-template-columns: 1fr; }
+      .kpis { grid-template-columns: 1fr 1fr; }
+      header { display: block; }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header>
+      <div>
+        <h1>ResidualMap</h1>
+        <div class="sub" id="profile">Загрузка...</div>
+      </div>
+    </header>
+
+    <div class="periods" id="periods">
+      <button data-period="today">День</button>
+      <button data-period="week">Неделя</button>
+      <button data-period="last_7_days">7 дней</button>
+      <button data-period="month" class="active">Месяц</button>
+    </div>
+
+    <section class="kpis" id="kpis"></section>
+
+    <section class="grid">
+      <div class="panel">
+        <h2>Динамика</h2>
+        <div id="chart"></div>
+      </div>
+      <div class="panel">
+        <h2>Категории</h2>
+        <div class="list" id="categories"></div>
+      </div>
+      <div class="panel">
+        <h2>Долги</h2>
+        <div class="list" id="debts"></div>
+      </div>
+      <div class="panel">
+        <h2>Последние записи</h2>
+        <div class="list" id="recent"></div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const tg = window.Telegram && window.Telegram.WebApp;
+    const state = { period: "month", data: null };
+    if (tg) {
+      tg.ready();
+      tg.expand();
+      if (tg.MainButton) tg.MainButton.hide();
+    }
+
+    document.getElementById("periods").addEventListener("click", (event) => {
+      const button = event.target.closest("button[data-period]");
+      if (!button) return;
+      state.period = button.dataset.period;
+      for (const item of document.querySelectorAll("#periods button")) item.classList.toggle("active", item === button);
+      load();
+    });
+
+    function money(minor, currency) {
+      const amount = Number(minor || 0) / 100;
+      return amount.toLocaleString("ru-RU", { maximumFractionDigits: 2 }) + " " + (currency || "KZT");
+    }
+
+    function primaryCurrency(summary, user) {
+      const totals = summary.totals_by_currency || [];
+      const preferred = totals.find((item) => item.currency === user.currency);
+      return (preferred || totals[0] || { currency: user.currency || "KZT" }).currency;
+    }
+
+    function row(title, meta, amount, tone) {
+      const element = document.createElement("div");
+      element.className = "row";
+      element.innerHTML = "<div><div class='title'></div><div class='meta'></div></div><div class='amount'></div>";
+      element.querySelector(".title").textContent = title;
+      element.querySelector(".meta").textContent = meta || "";
+      const amountEl = element.querySelector(".amount");
+      amountEl.textContent = amount || "";
+      if (tone) amountEl.classList.add(tone);
+      return element;
+    }
+
+    function render(data) {
+      const user = data.user;
+      const summary = data.summary;
+      const currency = primaryCurrency(summary, user);
+      const total = (summary.totals_by_currency || []).find((item) => item.currency === currency) || {};
+      document.getElementById("profile").textContent = (user.currency || "KZT") + " · " + (user.timezone || "Asia/Qyzylorda") + " · " + summary.period.label;
+
+      document.getElementById("kpis").innerHTML = [
+        kpi("Расходы", money(total.expense_minor, currency)),
+        kpi("Доходы", money(total.income_minor, currency)),
+        kpi("Дал в долг", money(total.loan_out_minor, currency)),
+        kpi("Записей", String(summary.transaction_count || 0))
+      ].join("");
+
+      renderChart(summary.by_day || [], currency);
+      renderCategories(summary.categories || []);
+      renderDebts(data.debts || []);
+      renderRecent(data.recent || []);
+    }
+
+    function kpi(label, value) {
+      return "<div class='kpi'><div class='label'>" + escapeHtml(label) + "</div><div class='value'>" + escapeHtml(value) + "</div></div>";
+    }
+
+    function renderChart(rows, currency) {
+      const root = document.getElementById("chart");
+      root.innerHTML = "";
+      const filtered = rows.filter((row) => row.currency === currency);
+      if (!filtered.length) {
+        root.innerHTML = "<div class='empty'>Нет расходов за период</div>";
+        return;
+      }
+      const max = Math.max(...filtered.map((row) => Number(row.expense_minor || 0)), 1);
+      for (const item of filtered) {
+        const line = document.createElement("div");
+        line.className = "bar-row";
+        const pct = Math.max(2, Math.round(Number(item.expense_minor || 0) / max * 100));
+        line.innerHTML = "<div></div><div class='bar'><div class='fill' style='width:" + pct + "%'></div></div><div></div>";
+        line.children[0].textContent = item.local_date.slice(5);
+        line.children[2].textContent = money(item.expense_minor, item.currency);
+        root.appendChild(line);
+      }
+    }
+
+    function renderCategories(items) {
+      const root = document.getElementById("categories");
+      root.innerHTML = "";
+      if (!items.length) {
+        root.innerHTML = "<div class='empty'>Нет категорий</div>";
+        return;
+      }
+      for (const item of items.slice(0, 8)) {
+        root.appendChild(row(item.category + " > " + item.subcategory, item.count + " записей", money(item.amount_minor, item.currency), "expense"));
+      }
+    }
+
+    function renderDebts(items) {
+      const root = document.getElementById("debts");
+      root.innerHTML = "";
+      if (!items.length) {
+        root.innerHTML = "<div class='empty'>Открытых долгов нет</div>";
+        return;
+      }
+      for (const item of items) {
+        if (Number(item.receivable_minor) > 0) {
+          root.appendChild(row(item.counterparty, "должен вам", money(item.receivable_minor, item.currency), "debt"));
+        }
+        if (Number(item.payable_minor) > 0) {
+          root.appendChild(row(item.counterparty, "вы должны", money(item.payable_minor, item.currency), "debt"));
+        }
+      }
+    }
+
+    function renderRecent(items) {
+      const root = document.getElementById("recent");
+      root.innerHTML = "";
+      if (!items.length) {
+        root.innerHTML = "<div class='empty'>Записей пока нет</div>";
+        return;
+      }
+      for (const item of items.slice(0, 12)) {
+        const meta = item.local_date + " · #" + item.id + " · " + [item.category, item.subcategory].filter(Boolean).join(" > ");
+        const tone = item.kind === "income" ? "income" : item.kind.includes("loan") || item.kind.includes("borrow") ? "debt" : "expense";
+        root.appendChild(row(item.description || item.raw_text || item.kind, meta, money(item.amount_minor, item.currency), tone));
+      }
+    }
+
+    function escapeHtml(value) {
+      return String(value == null ? "" : value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;");
+    }
+
+    async function load() {
+      if (!tg || !tg.initData) {
+        document.getElementById("profile").textContent = "Откройте панель из Telegram";
+        document.getElementById("kpis").innerHTML = "<div class='kpi'><div class='value'>Нет доступа</div></div>";
+        return;
+      }
+      try {
+        const response = await fetch("/api/app-data", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ initData: tg.initData, period: state.period })
+        });
+        const data = await response.json();
+        if (!response.ok || !data.ok) throw new Error(data.error || "Ошибка загрузки");
+        state.data = data;
+        render(data);
+      } catch (error) {
+        document.getElementById("profile").textContent = "Ошибка";
+        document.getElementById("kpis").innerHTML = "<div class='kpi'><div class='value'>Не удалось загрузить</div><div class='meta'>" + escapeHtml(error.message) + "</div></div>";
+      }
+    }
+
+    load();
+  </script>
+</body>
+</html>`;
 }

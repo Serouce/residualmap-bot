@@ -26,6 +26,7 @@ Telegram bot for personal expense tracking on Cloudflare Workers, Cloudflare D1,
 - `/restore 123` - restore a deleted record by ID.
 - `/export` - download CSV export.
 - `/settings` - show current bot settings.
+- `/app` - open the Telegram Mini App analytics panel.
 
 ## Runtime configuration
 
@@ -36,6 +37,7 @@ Non-secret defaults live in `wrangler.toml` under `[vars]`, so GitHub deploys ke
 - `DEFAULT_TIMEZONE`
 - `OPENAI_MODEL_PARSE`
 - `OPENAI_MODEL_ANALYTICS`
+- `MINI_APP_URL`
 
 ## Required Cloudflare secrets
 

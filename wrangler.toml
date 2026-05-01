@@ -9,6 +9,7 @@ DEFAULT_CURRENCY = "KZT"
 DEFAULT_TIMEZONE = "Asia/Qyzylorda"
 OPENAI_MODEL_PARSE = "gpt-5.4"
 OPENAI_MODEL_ANALYTICS = "gpt-5.4"
+MINI_APP_URL = "https://residualmap-bot.residualmap.workers.dev/app"
 
 [[d1_databases]]
 binding = "DB"

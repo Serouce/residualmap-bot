@@ -6,4 +6,5 @@ OPENAI_MODEL_ANALYTICS=gpt-5.4
 ALLOWED_TELEGRAM_IDS=123456789,987654321
 DEFAULT_CURRENCY=KZT
 DEFAULT_TIMEZONE=Asia/Qyzylorda
+MINI_APP_URL=https://residualmap-bot.residualmap.workers.dev/app
 SETUP_TOKEN=replace_with_long_random_admin_setup_token

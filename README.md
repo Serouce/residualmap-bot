@@ -44,3 +44,7 @@ Telegram bot for personal expense tracking on Cloudflare Workers, Cloudflare D1,
 4. Add the required secrets to the Worker.
 5. Deploy the Worker.
 6. Set the Telegram webhook with the Worker URL and `TELEGRAM_WEBHOOK_SECRET`.
+
+## GitHub workflow
+
+Pushes to `main` trigger a Cloudflare Workers build and deploy.

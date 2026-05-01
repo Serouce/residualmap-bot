@@ -1,0 +1,10 @@
+name = "residualmap-bot"
+main = "src/worker.js"
+compatibility_date = "2026-04-30"
+workers_dev = true
+
+[[d1_databases]]
+binding = "DB"
+database_name = "residualmap_expenses"
+database_id = "0ffa30e8-7e37-4f58-b06c-c03baa38872e"
+migrations_dir = "migrations"

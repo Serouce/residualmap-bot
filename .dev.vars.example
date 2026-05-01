@@ -1,0 +1,9 @@
+TELEGRAM_BOT_TOKEN=replace_with_botfather_token
+TELEGRAM_WEBHOOK_SECRET=replace_with_long_random_secret
+OPENAI_API_KEY=replace_with_openai_project_key
+OPENAI_MODEL_PARSE=gpt-5.4
+OPENAI_MODEL_ANALYTICS=gpt-5.4
+ALLOWED_TELEGRAM_IDS=123456789,987654321
+DEFAULT_CURRENCY=KZT
+DEFAULT_TIMEZONE=Asia/Qyzylorda
+SETUP_TOKEN=replace_with_long_random_admin_setup_token

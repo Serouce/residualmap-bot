@@ -401,6 +401,11 @@ async function handleCommand(env, context) {
     return;
   }
 
+  if (command === "/last") {
+    await handleLast(env, chatId, user, arg);
+    return;
+  }
+
   if (command === "/undo") {
     await undoLast(env, chatId, user);
     return;
@@ -408,6 +413,11 @@ async function handleCommand(env, context) {
 
   if (command === "/delete") {
     await deleteById(env, chatId, user, arg);
+    return;
+  }
+
+  if (command === "/restore") {
+    await restoreById(env, chatId, user, arg);
     return;
   }
 
@@ -436,8 +446,11 @@ function helpText(user) {
     "/week - текущая неделя",
     "/month - текущий месяц",
     "/debts - долги",
+    "/last - последние записи",
+    "/last deleted - удаленные записи",
     "/undo - отменить последнюю запись",
     "/delete 123 - удалить запись",
+    "/restore 123 - восстановить запись",
     "/export - скачать CSV",
     "/settings - настройки",
     "/id - мой Telegram ID",
@@ -867,6 +880,46 @@ async function handleDebts(env, chatId, user) {
   await sendMessage(env, chatId, lines.join("\n"));
 }
 
+async function handleLast(env, chatId, user, arg) {
+  const normalizedArg = String(arg || "").trim().toLowerCase();
+  const showDeleted = ["deleted", "delete", "удаленные", "удалённые", "удалено"].includes(normalizedArg);
+  const limitFromArg = Number(normalizedArg);
+  const limit = Number.isInteger(limitFromArg) && limitFromArg > 0 ? Math.min(limitFromArg, 20) : 10;
+  const status = showDeleted ? "deleted" : "active";
+
+  const rows = await env.DB.prepare(
+    `SELECT id, local_date, kind, amount_minor, currency, category, subcategory, counterparty, description, status
+    FROM transactions
+    WHERE user_id = ? AND status = ?
+    ORDER BY id DESC
+    LIMIT ?`
+  )
+    .bind(user.id, status, limit)
+    .all();
+
+  const items = rows.results || [];
+  if (!items.length) {
+    await sendMessage(env, chatId, showDeleted ? "Удаленных записей пока нет." : "Активных записей пока нет.");
+    return;
+  }
+
+  const lines = [showDeleted ? "Последние удаленные записи:" : "Последние активные записи:"];
+  for (const row of items) {
+    lines.push(formatBriefTransaction(row));
+  }
+
+  if (showDeleted) {
+    lines.push("");
+    lines.push("Восстановить: /restore 123");
+  } else {
+    lines.push("");
+    lines.push("Удалить конкретную: /delete 123");
+    lines.push("Показать удаленные: /last deleted");
+  }
+
+  await sendMessage(env, chatId, lines.join("\n"));
+}
+
 async function undoLast(env, chatId, user) {
   const row = await env.DB.prepare(
     `SELECT id, kind, amount_minor, currency, category, subcategory
@@ -915,6 +968,43 @@ async function deleteById(env, chatId, user, arg) {
   await sendMessage(env, chatId, `Удалил запись <code>${id}</code>.`);
 }
 
+async function restoreById(env, chatId, user, arg) {
+  const id = Number(arg);
+  if (!Number.isInteger(id) || id <= 0) {
+    await sendMessage(env, chatId, "Укажи ID записи: <code>/restore 123</code>");
+    return;
+  }
+
+  const row = await env.DB.prepare(
+    `SELECT id, kind, amount_minor, currency, category, subcategory
+    FROM transactions
+    WHERE user_id = ? AND id = ? AND status = 'deleted'`
+  )
+    .bind(user.id, id)
+    .first();
+
+  if (!row) {
+    await sendMessage(env, chatId, `Удаленная запись <code>${id}</code> не найдена.`);
+    return;
+  }
+
+  const now = new Date().toISOString();
+  await env.DB.prepare(
+    `UPDATE transactions
+    SET status = 'active', deleted_at = NULL, updated_at = ?
+    WHERE user_id = ? AND id = ? AND status = 'deleted'`
+  )
+    .bind(now, user.id, id)
+    .run();
+  await audit(env, user.id, id, "restore", { restored_at: now });
+
+  await sendMessage(
+    env,
+    chatId,
+    `Восстановил запись <code>${row.id}</code>: ${escapeHtml(KIND_LABELS[row.kind] || row.kind)}, ${formatAmount(row.amount_minor, row.currency)}.`
+  );
+}
+
 async function softDelete(env, userId, transactionId, action) {
   const now = new Date().toISOString();
   await env.DB.prepare(
@@ -925,6 +1015,20 @@ async function softDelete(env, userId, transactionId, action) {
     .bind(now, now, userId, transactionId)
     .run();
   await audit(env, userId, transactionId, action, { deleted_at: now });
+}
+
+function formatBriefTransaction(row) {
+  const category = row.category
+    ? ` | ${escapeHtml(row.category)}${row.subcategory ? " > " + escapeHtml(row.subcategory) : ""}`
+    : "";
+  const counterparty = row.counterparty ? ` | ${escapeHtml(row.counterparty)}` : "";
+  const description = row.description ? ` | ${escapeHtml(limitText(row.description, 60))}` : "";
+  return [
+    `<code>${row.id}</code>.`,
+    escapeHtml(row.local_date),
+    escapeHtml(KIND_LABELS[row.kind] || row.kind),
+    `<b>${formatAmount(row.amount_minor, row.currency)}</b>${category}${counterparty}${description}`
+  ].join(" ");
 }
 
 async function exportCsv(env, chatId, user) {

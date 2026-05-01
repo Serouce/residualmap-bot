@@ -1,0 +1,10 @@
+name = "residualmap-bot"
+main = "src/worker.js"
+compatibility_date = "2026-04-30"
+workers_dev = true
+
+[[d1_databases]]
+binding = "DB"
+database_name = "residualmap_expenses"
+database_id = "replace_with_your_cloudflare_d1_database_id"
+migrations_dir = "migrations"

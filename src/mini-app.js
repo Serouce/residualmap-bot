@@ -9,21 +9,27 @@ export function miniAppHtml() {
   <style>
     :root {
       color-scheme: light;
-      --ivory: #f8f4ef;
-      --mint: #d9efe5;
-      --lavender: #e8e0f4;
-      --peach: #f7d7c4;
-      --blue: #d7e8f7;
-      --butter: #f4e6a4;
-      --ink: #20242e;
-      --muted: #747c8d;
-      --surface: rgba(255,255,255,.78);
-      --solid: #fffaf5;
-      --line: rgba(32,36,46,.1);
-      --shadow: 0 14px 36px rgba(62,66,82,.1);
-      --rose: #d96c86;
-      --green: #41966f;
-      --gold: #ad7b19;
+      --ivory: #f8f3ed;
+      --paper: #fffdfa;
+      --mist: #edf3ef;
+      --mint: #dcefe6;
+      --lavender: #e9e1f2;
+      --peach: #f6d8c7;
+      --blue: #dbeaf6;
+      --butter: #f2e5aa;
+      --ink: #222632;
+      --muted: #717987;
+      --soft-muted: #8b93a0;
+      --surface: rgba(255,255,255,.72);
+      --solid: #fffaf6;
+      --line: rgba(42,46,58,.09);
+      --hairline: rgba(255,255,255,.72);
+      --shadow: 0 18px 46px rgba(38,42,54,.09), 0 2px 8px rgba(38,42,54,.04);
+      --shadow-soft: 0 10px 24px rgba(38,42,54,.07);
+      --rose: #c96f83;
+      --green: #4b9475;
+      --gold: #a8792c;
+      --violet: #8f7bbe;
     }
     * { box-sizing: border-box; }
     body {
@@ -31,9 +37,11 @@ export function miniAppHtml() {
       min-height: 100vh;
       color: var(--ink);
       background:
-        linear-gradient(145deg, rgba(248,244,239,.96), rgba(217,239,229,.78) 45%, rgba(215,232,247,.72)),
+        linear-gradient(135deg, rgba(248,243,237,.98) 0%, rgba(250,247,243,.96) 36%, rgba(237,243,239,.94) 68%, rgba(245,238,245,.92) 100%),
         var(--ivory);
-      font: 15px/1.42 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font: 15px/1.42 ui-sans-serif, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", sans-serif;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
     }
     button, input, select {
       font: inherit;
@@ -45,15 +53,15 @@ export function miniAppHtml() {
     .app {
       width: min(1080px, 100%);
       margin: 0 auto;
-      padding: 12px 12px max(28px, env(safe-area-inset-bottom));
+      padding: 10px 10px max(28px, env(safe-area-inset-bottom));
     }
     .top {
       position: sticky;
       top: 0;
       z-index: 20;
       padding: 8px 0 10px;
-      background: linear-gradient(180deg, rgba(248,244,239,.96), rgba(248,244,239,.82) 78%, rgba(248,244,239,0));
-      backdrop-filter: blur(14px);
+      background: linear-gradient(180deg, rgba(248,243,237,.94), rgba(248,243,237,.82) 78%, rgba(248,243,237,0));
+      backdrop-filter: blur(20px);
     }
     .brand-row {
       display: flex;
@@ -74,14 +82,14 @@ export function miniAppHtml() {
       display: grid;
       place-items: center;
       border-radius: 8px;
-      background: linear-gradient(135deg, var(--mint), var(--blue));
-      box-shadow: var(--shadow);
-      font-weight: 900;
+      background: linear-gradient(145deg, #e7f2ed, #dcebf2);
+      box-shadow: var(--shadow-soft);
+      font-weight: 780;
       color: #23614e;
     }
     .brand-title {
       font-size: 18px;
-      font-weight: 860;
+      font-weight: 760;
       letter-spacing: 0;
     }
     .brand-sub {
@@ -93,11 +101,11 @@ export function miniAppHtml() {
       min-width: 40px;
       height: 40px;
       border-radius: 8px;
-      background: var(--surface);
+      background: rgba(255,255,255,.82);
       border: 1px solid var(--line);
-      box-shadow: 0 8px 20px rgba(62,66,82,.08);
+      box-shadow: var(--shadow-soft);
       color: var(--ink);
-      font-weight: 780;
+      font-weight: 720;
     }
     .segments, .tabs {
       display: grid;
@@ -111,23 +119,25 @@ export function miniAppHtml() {
       grid-template-columns: repeat(3, minmax(0, 1fr));
       padding: 4px;
       border-radius: 8px;
-      background: rgba(255,255,255,.46);
+      background: rgba(255,255,255,.58);
       border: 1px solid var(--line);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.86);
     }
     .segments button, .tabs button {
-      min-height: 40px;
+      min-height: 38px;
       border-radius: 8px;
       color: var(--ink);
-      background: rgba(255,255,255,.6);
-      font-weight: 780;
+      background: rgba(255,255,255,.72);
+      font-weight: 720;
     }
     .segments button.active {
-      background: var(--lavender);
-      box-shadow: inset 0 0 0 1px rgba(120,98,160,.14);
+      background: #eee7f7;
+      box-shadow: inset 0 0 0 1px rgba(143,123,190,.2), 0 8px 18px rgba(143,123,190,.1);
     }
     .tabs button.active {
       background: var(--ink);
       color: #fff;
+      box-shadow: 0 10px 24px rgba(34,38,50,.14);
     }
     .view { display: none; }
     .view.active { display: block; }
@@ -135,20 +145,20 @@ export function miniAppHtml() {
       display: grid;
       grid-template-columns: minmax(0, 1.4fr) minmax(240px, .6fr);
       gap: 10px;
-      margin: 10px 0;
+      margin: 12px 0 10px;
     }
     .card {
-      border: 1px solid rgba(255,255,255,.78);
+      border: 1px solid var(--hairline);
       border-radius: 8px;
       background: var(--surface);
       box-shadow: var(--shadow);
-      backdrop-filter: blur(16px);
+      backdrop-filter: blur(22px);
       min-width: 0;
     }
     .hero-main {
-      padding: 18px;
+      padding: 18px 18px 17px;
       background:
-        linear-gradient(135deg, rgba(255,255,255,.88), rgba(232,224,244,.72)),
+        linear-gradient(135deg, rgba(255,255,255,.88), rgba(236,228,245,.78)),
         var(--lavender);
     }
     .hero-side {
@@ -156,31 +166,33 @@ export function miniAppHtml() {
       display: grid;
       align-content: space-between;
       background:
-        linear-gradient(135deg, rgba(32,36,46,.94), rgba(57,65,81,.9));
+        linear-gradient(135deg, rgba(34,38,50,.96), rgba(53,58,72,.93));
       color: #fff;
     }
     .eyebrow, .side-label, .caption, .label {
       color: var(--muted);
-      font-size: 12px;
-      font-weight: 720;
+      font-size: 12.5px;
+      font-weight: 650;
     }
     .hero-side .side-label, .hero-side .caption { color: rgba(255,255,255,.68); }
     h1 {
       margin: 8px 0 4px;
-      font-size: 42px;
+      font-size: 40px;
       line-height: 1;
       letter-spacing: 0;
+      font-weight: 760;
       overflow-wrap: anywhere;
     }
     h2 {
       margin: 0;
-      font-size: 17px;
+      font-size: 18px;
+      font-weight: 740;
       letter-spacing: 0;
     }
     .side-value {
       margin-top: 4px;
       font-size: 25px;
-      font-weight: 860;
+      font-weight: 760;
       overflow-wrap: anywhere;
     }
     .grid {
@@ -191,32 +203,32 @@ export function miniAppHtml() {
     }
     .metric {
       padding: 13px;
-      min-height: 92px;
+      min-height: 98px;
     }
-    .metric:nth-child(1) { background: rgba(247,215,196,.68); }
-    .metric:nth-child(2) { background: rgba(217,239,229,.72); }
-    .metric:nth-child(3) { background: rgba(215,232,247,.72); }
-    .metric:nth-child(4) { background: rgba(244,230,164,.62); }
+    .metric:nth-child(1) { background: linear-gradient(145deg, rgba(247,216,202,.78), rgba(255,250,246,.72)); }
+    .metric:nth-child(2) { background: linear-gradient(145deg, rgba(220,239,230,.84), rgba(255,250,246,.74)); }
+    .metric:nth-child(3) { background: linear-gradient(145deg, rgba(219,234,246,.82), rgba(255,250,246,.74)); }
+    .metric:nth-child(4) { background: linear-gradient(145deg, rgba(242,229,170,.72), rgba(255,250,246,.76)); }
     .value {
       margin-top: 5px;
       font-size: 18px;
-      font-weight: 860;
+      font-weight: 760;
       overflow-wrap: anywhere;
     }
     .hint {
       margin-top: 4px;
-      color: var(--muted);
+      color: var(--soft-muted);
       font-size: 12px;
       overflow-wrap: anywhere;
     }
     .dashboard {
       display: grid;
       grid-template-columns: minmax(0, 1.2fr) minmax(300px, .8fr);
-      gap: 10px;
+      gap: 12px;
     }
     .wide { grid-column: span 2; }
     .panel {
-      padding: 15px;
+      padding: 16px;
     }
     .panel-head {
       display: flex;
@@ -226,20 +238,23 @@ export function miniAppHtml() {
       margin-bottom: 12px;
     }
     .chart {
-      min-height: 246px;
+      min-height: 292px;
     }
     svg {
       display: block;
       width: 100%;
       height: auto;
     }
+    svg text {
+      font-family: inherit;
+    }
     .legend {
       display: flex;
       flex-wrap: wrap;
       gap: 10px;
-      margin-top: 8px;
+      margin-top: 10px;
       color: var(--muted);
-      font-size: 12px;
+      font-size: 13px;
     }
     .legend span {
       display: inline-flex;
@@ -256,7 +271,7 @@ export function miniAppHtml() {
     .category-layout {
       display: grid;
       grid-template-columns: 150px 1fr;
-      gap: 14px;
+      gap: 16px;
       align-items: center;
     }
     .donut {
@@ -266,7 +281,7 @@ export function miniAppHtml() {
       display: grid;
       place-items: center;
       border-radius: 50%;
-      box-shadow: inset 0 0 0 1px rgba(32,36,46,.08);
+      box-shadow: inset 0 0 0 1px rgba(32,36,46,.07), 0 10px 26px rgba(38,42,54,.06);
     }
     .donut-core {
       width: 88px;
@@ -274,16 +289,16 @@ export function miniAppHtml() {
       display: grid;
       place-items: center;
       border-radius: 50%;
-      background: rgba(255,250,245,.94);
+      background: rgba(255,253,250,.96);
       text-align: center;
       padding: 9px;
       color: var(--muted);
-      font-size: 11px;
+      font-size: 11.5px;
     }
     .donut-core strong {
       display: block;
       color: var(--ink);
-      font-size: 13px;
+      font-size: 13.5px;
       overflow-wrap: anywhere;
     }
     .list {
@@ -300,9 +315,9 @@ export function miniAppHtml() {
     }
     .row:first-child { border-top: 0; padding-top: 0; }
     .clickable { cursor: pointer; }
-    .title { font-weight: 780; overflow-wrap: anywhere; }
+    .title { font-weight: 720; overflow-wrap: anywhere; }
     .meta { margin-top: 2px; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
-    .amount { font-weight: 860; white-space: nowrap; }
+    .amount { font-weight: 760; white-space: nowrap; }
     .expense { color: var(--rose); }
     .income { color: var(--green); }
     .debt { color: var(--gold); }
@@ -527,15 +542,11 @@ export function miniAppHtml() {
           <div class="list" id="categories"></div>
         </section>
 
-        <section class="panel card">
+        <section class="panel card wide">
           <div class="panel-head"><div><h2>Крупные траты</h2><div class="caption">Самые заметные списания</div></div></div>
           <div class="list" id="largest"></div>
         </section>
 
-        <section class="panel card">
-          <div class="panel-head"><div><h2>Долги</h2><div class="caption">Кто кому должен</div></div></div>
-          <div class="list" id="debtsPreview"></div>
-        </section>
       </section>
     </section>
 
@@ -724,6 +735,7 @@ export function miniAppHtml() {
       const periodDays = dayCount(summary.period.start, summary.period.end);
       const series = buildDailySeries(summary);
       const activeDays = series.filter(function(item) { return item.expense_minor > 0; }).length;
+      const quietDays = Math.max(0, periodDays - activeDays);
       const topCategory = firstKzt(summary.category_totals || []);
       const largest = firstKzt(summary.largest_expenses || []);
 
@@ -738,14 +750,13 @@ export function miniAppHtml() {
         metric("Средний день", money(periodDays ? Math.round(expense / periodDays) : 0), "за выбранный период"),
         metric("Доходы", money(income), "поступления"),
         metric("Топ категория", topCategory ? topCategory.category : "Пока нет", topCategory ? money(topCategory.amount_minor) : "нет расходов"),
-        metric("Активных дней", String(activeDays), "из " + periodDays)
+        metric("Дней без трат", String(quietDays), "из " + periodDays)
       ].join("");
 
       renderDailyChart(summary);
       renderCategoryTotals(summary.category_totals || []);
       renderCategories(summary.categories || []);
       renderLargest(summary.largest_expenses || []);
-      renderDebts(data.debts || [], "debtsPreview", 4);
       renderDebts(data.debts || [], "debtsFull", 50);
     }
 
@@ -767,21 +778,26 @@ export function miniAppHtml() {
         return;
       }
       const width = 760;
-      const height = 252;
-      const pad = { left: 50, right: 18, top: 22, bottom: 40 };
+      const height = 312;
+      const pad = { left: 64, right: 22, top: 30, bottom: 54 };
       const plotW = width - pad.left - pad.right;
       const plotH = height - pad.top - pad.bottom;
       const max = Math.max.apply(null, series.map(function(item) { return Math.max(item.expense_minor, item.income_minor); }).concat([1]));
       const step = series.length > 1 ? plotW / (series.length - 1) : plotW;
-      const barW = Math.max(5, Math.min(20, plotW / Math.max(series.length, 1) * .48));
+      const barW = Math.max(8, Math.min(24, plotW / Math.max(series.length, 1) * .46));
       const incomePoints = [];
       let bars = "";
+      let valueLabels = "";
       for (let i = 0; i < series.length; i += 1) {
         const item = series[i];
         const x = pad.left + (series.length > 1 ? i * step : plotW / 2);
         const expenseH = item.expense_minor / max * plotH;
         const barHeight = expenseH > 0 ? Math.max(2, expenseH) : 0;
-        bars += "<rect x='" + (x - barW / 2).toFixed(2) + "' y='" + (pad.top + plotH - barHeight).toFixed(2) + "' width='" + barW.toFixed(2) + "' height='" + barHeight.toFixed(2) + "' rx='5' fill='#d96c86' opacity='.88'></rect>";
+        const barY = pad.top + plotH - barHeight;
+        bars += "<rect x='" + (x - barW / 2).toFixed(2) + "' y='" + barY.toFixed(2) + "' width='" + barW.toFixed(2) + "' height='" + barHeight.toFixed(2) + "' rx='6' fill='#c96f83' opacity='.9'></rect>";
+        if (item.expense_minor > 0 && series.length <= 10) {
+          valueLabels += "<text x='" + x.toFixed(2) + "' y='" + Math.max(20, barY - 9).toFixed(2) + "' fill='#8f4b5d' font-size='15' font-weight='680' text-anchor='middle'>" + escapeHtml(shortMoney(item.expense_minor)) + "</text>";
+        }
         incomePoints.push([x, pad.top + plotH - item.income_minor / max * plotH]);
       }
       const incomePath = incomePoints.map(function(point, index) { return (index === 0 ? "M" : "L") + point[0].toFixed(2) + " " + point[1].toFixed(2); }).join(" ");
@@ -791,12 +807,13 @@ export function miniAppHtml() {
       }).join("");
       root.innerHTML =
         "<svg viewBox='0 0 " + width + " " + height + "' role='img' aria-label='Динамика расходов и доходов'>" +
-        "<rect x='0' y='0' width='" + width + "' height='" + height + "' rx='8' fill='rgba(255,255,255,.5)'></rect>" +
+        "<rect x='0' y='0' width='" + width + "' height='" + height + "' rx='8' fill='rgba(255,253,250,.58)'></rect>" +
         grid +
-        "<text x='12' y='30' fill='#747c8d' font-size='12'>" + escapeHtml(shortMoney(max)) + "</text>" +
+        "<text x='18' y='38' fill='#6f7785' font-size='17' font-weight='650'>" + escapeHtml(shortMoney(max)) + "</text>" +
         bars +
-        "<path d='" + incomePath + "' fill='none' stroke='#41966f' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'></path>" +
-        incomePoints.map(function(point) { return "<circle cx='" + point[0].toFixed(2) + "' cy='" + point[1].toFixed(2) + "' r='4' fill='#41966f' stroke='white' stroke-width='2'></circle>"; }).join("") +
+        valueLabels +
+        "<path d='" + incomePath + "' fill='none' stroke='#4b9475' stroke-width='5' stroke-linecap='round' stroke-linejoin='round'></path>" +
+        incomePoints.map(function(point) { return "<circle cx='" + point[0].toFixed(2) + "' cy='" + point[1].toFixed(2) + "' r='5' fill='#4b9475' stroke='white' stroke-width='2.4'></circle>"; }).join("") +
         chartLabels(series, pad, plotW, step) +
         "</svg>";
     }
@@ -1021,7 +1038,7 @@ export function miniAppHtml() {
       for (let i = 0; i < series.length; i += 1) {
         if (i !== 0 && i !== series.length - 1 && i % every !== 0) continue;
         const x = pad.left + (series.length > 1 ? i * step : plotW / 2);
-        labels.push("<text x='" + x.toFixed(2) + "' y='232' fill='#747c8d' font-size='12' text-anchor='middle'>" + escapeHtml(shortDate(series[i].date)) + "</text>");
+        labels.push("<text x='" + x.toFixed(2) + "' y='286' fill='#6f7785' font-size='16' font-weight='620' text-anchor='middle'>" + escapeHtml(shortDate(series[i].date)) + "</text>");
       }
       return labels.join("");
     }

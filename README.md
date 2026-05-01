@@ -27,17 +27,22 @@ Telegram bot for personal expense tracking on Cloudflare Workers, Cloudflare D1,
 - `/export` - download CSV export.
 - `/settings` - show current bot settings.
 
+## Runtime configuration
+
+Non-secret defaults live in `wrangler.toml` under `[vars]`, so GitHub deploys keep them attached to the Worker:
+
+- `ALLOWED_TELEGRAM_IDS`
+- `DEFAULT_CURRENCY`
+- `DEFAULT_TIMEZONE`
+- `OPENAI_MODEL_PARSE`
+- `OPENAI_MODEL_ANALYTICS`
+
 ## Required Cloudflare secrets
 
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_WEBHOOK_SECRET`
 - `OPENAI_API_KEY`
-- `ALLOWED_TELEGRAM_IDS`
-- `DEFAULT_CURRENCY`
-- `DEFAULT_TIMEZONE`
 - `SETUP_TOKEN`
-- `OPENAI_MODEL_PARSE`
-- `OPENAI_MODEL_ANALYTICS`
 
 ## Deployment outline
 

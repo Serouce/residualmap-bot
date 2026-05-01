@@ -1484,7 +1484,7 @@ async function validateTelegramInitData(initData, botToken) {
   params.delete("hash");
   const authDate = Number(params.get("auth_date") || 0);
   const nowSeconds = Math.floor(Date.now() / 1000);
-  if (!authDate || nowSeconds - authDate > 86400) {
+  if (!authDate || nowSeconds - authDate > 86400 || authDate - nowSeconds > 60) {
     return { ok: false, error: "Telegram init data expired" };
   }
 
@@ -1504,7 +1504,12 @@ async function validateTelegramInitData(initData, botToken) {
   const userRaw = params.get("user");
   if (!userRaw) return { ok: false, error: "Telegram user is missing" };
 
-  const user = JSON.parse(userRaw);
+  let user;
+  try {
+    user = JSON.parse(userRaw);
+  } catch {
+    return { ok: false, error: "Telegram user is invalid" };
+  }
   if (!user || !user.id) return { ok: false, error: "Telegram user is invalid" };
   return { ok: true, user };
 }

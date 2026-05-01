@@ -26,7 +26,21 @@ Telegram bot for personal expense tracking on Cloudflare Workers, Cloudflare D1,
 - `/restore 123` - restore a deleted record by ID.
 - `/export` - download CSV export.
 - `/settings` - show current bot settings.
-- `/app` - open the Telegram Mini App analytics panel.
+- `/app` - open the Telegram Mini App finance panel.
+
+## Mini App
+
+The Mini App is a KZT-first dashboard with three views:
+
+- Overview: KPIs, daily income/expense chart, category infographic, and largest expenses.
+- Records: searchable and filterable transaction list with transaction details.
+- Debts: focused view of open receivables and payables.
+
+Mini App data is served through Telegram-authenticated JSON endpoints:
+
+- `POST /api/app-data`
+- `POST /api/transactions`
+- `POST /api/transaction-action`
 
 ## Runtime configuration
 

@@ -1,3 +1,5 @@
+import { miniAppHtml as renderMiniAppHtml } from "./mini-app.js";
+
 const TELEGRAM_API = "https://api.telegram.org/bot";
 
 const TRANSACTION_KINDS = new Set([
@@ -157,7 +159,7 @@ export default {
 
     if (request.method === "GET") {
       if (url.pathname === "/app") {
-        return html(miniAppHtml());
+        return html(renderMiniAppHtml());
       }
       if (url.pathname === "/admin/set-webhook") {
         return handleSetWebhook(url, env);
@@ -179,16 +181,25 @@ export default {
       return handleMiniAppData(request, env);
     }
 
+    if (request.method === "POST" && url.pathname === "/api/transactions") {
+      return handleMiniAppTransactions(request, env);
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/transaction-action") {
+      return handleMiniAppTransactionAction(request, env);
+    }
+
     if (request.method !== "POST") {
       return new Response("Method not allowed", { status: 405 });
     }
 
     const expectedSecret = env.TELEGRAM_WEBHOOK_SECRET;
-    if (expectedSecret) {
-      const actualSecret = request.headers.get("X-Telegram-Bot-Api-Secret-Token");
-      if (actualSecret !== expectedSecret) {
-        return new Response("Unauthorized", { status: 401 });
-      }
+    if (!expectedSecret) {
+      return new Response("TELEGRAM_WEBHOOK_SECRET is not configured", { status: 500 });
+    }
+    const actualSecret = request.headers.get("X-Telegram-Bot-Api-Secret-Token");
+    if (actualSecret !== expectedSecret) {
+      return new Response("Unauthorized", { status: 401 });
     }
 
     if (url.pathname !== "/telegram") {
@@ -252,22 +263,10 @@ async function handleDeleteWebhook(url, env) {
 }
 
 async function handleMiniAppData(request, env) {
-  const body = await request.json().catch(() => null);
-  if (!body || typeof body.initData !== "string") {
-    return json({ ok: false, error: "Mini App init data is required" }, { status: 401 });
-  }
+  const auth = await authenticateMiniAppRequest(request, env);
+  if (!auth.ok) return auth.response;
 
-  const validation = await validateTelegramInitData(body.initData, env.TELEGRAM_BOT_TOKEN);
-  if (!validation.ok) {
-    return json({ ok: false, error: validation.error }, { status: 401 });
-  }
-
-  const telegramUserId = String(validation.user.id);
-  if (!isAllowed(env, telegramUserId)) {
-    return json({ ok: false, error: "Access denied" }, { status: 403 });
-  }
-
-  const user = await upsertUser(env, validation.user);
+  const { body, user } = auth;
   const period = normalizePeriod(body.period);
   const bounds = periodBounds(period, user.timezone);
   const summary = await buildSummary(env, user.id, bounds);
@@ -291,6 +290,108 @@ async function handleMiniAppData(request, env) {
     deleted,
     debts
   });
+}
+
+async function handleMiniAppTransactions(request, env) {
+  const auth = await authenticateMiniAppRequest(request, env);
+  if (!auth.ok) return auth.response;
+
+  const { body, user } = auth;
+  const period = normalizePeriod(body.period);
+  const bounds = periodBounds(period, user.timezone);
+  const status = normalizeTransactionStatus(body.status);
+  const kind = normalizeTransactionKind(body.kind);
+  const category = limitText(cleanText(body.category), 60);
+  const query = limitText(cleanText(body.query), 120);
+  const limit = normalizeLimit(body.limit, 30, 50);
+  const result = await searchTransactions(env, {
+    userId: user.id,
+    bounds,
+    status,
+    kind,
+    category,
+    query,
+    limit
+  });
+
+  return json({
+    ok: true,
+    period,
+    bounds,
+    status,
+    kind,
+    category,
+    query,
+    limit,
+    items: result.items,
+    categories: result.categories
+  });
+}
+
+async function handleMiniAppTransactionAction(request, env) {
+  const auth = await authenticateMiniAppRequest(request, env);
+  if (!auth.ok) return auth.response;
+
+  const { body, user } = auth;
+  const id = Number(body.id);
+  const action = String(body.action || "");
+  if (!Number.isInteger(id) || id <= 0) {
+    return json({ ok: false, error: "Valid transaction id is required" }, { status: 400 });
+  }
+  if (action !== "delete" && action !== "restore") {
+    return json({ ok: false, error: "Action must be delete or restore" }, { status: 400 });
+  }
+
+  const row = await getTransactionById(env, user.id, id);
+  if (!row) {
+    return json({ ok: false, error: "Transaction not found" }, { status: 404 });
+  }
+
+  if (action === "delete") {
+    if (row.status !== "active") {
+      return json({ ok: false, error: "Transaction is already deleted" }, { status: 409 });
+    }
+    await softDelete(env, user.id, id, "mini_app_delete");
+  } else {
+    if (row.status !== "deleted") {
+      return json({ ok: false, error: "Transaction is not deleted" }, { status: 409 });
+    }
+    await restoreTransaction(env, user.id, id, "mini_app_restore");
+  }
+
+  return json({
+    ok: true,
+    action,
+    transaction: await getTransactionById(env, user.id, id)
+  });
+}
+
+async function authenticateMiniAppRequest(request, env) {
+  const body = await request.json().catch(() => null);
+  if (!body || typeof body.initData !== "string") {
+    return {
+      ok: false,
+      response: json({ ok: false, error: "Mini App init data is required" }, { status: 401 })
+    };
+  }
+
+  const validation = await validateTelegramInitData(body.initData, env.TELEGRAM_BOT_TOKEN);
+  if (!validation.ok) {
+    return {
+      ok: false,
+      response: json({ ok: false, error: validation.error }, { status: 401 })
+    };
+  }
+
+  const telegramUserId = String(validation.user.id);
+  if (!isAllowed(env, telegramUserId)) {
+    return {
+      ok: false,
+      response: json({ ok: false, error: "Access denied" }, { status: 403 })
+    };
+  }
+
+  return { ok: true, body, user: await upsertUser(env, validation.user) };
 }
 
 function requireSetupToken(url, env) {
@@ -1018,6 +1119,66 @@ async function listTransactions(env, userId, status, limit) {
   return rows.results || [];
 }
 
+async function searchTransactions(env, { userId, bounds, status, kind, category, query, limit }) {
+  const safeLimit = normalizeLimit(limit, 30, 50);
+  const conditions = ["user_id = ?", "status = ?", "currency = 'KZT'", "local_date BETWEEN ? AND ?"];
+  const binds = [userId, status, bounds.start, bounds.end];
+
+  if (kind) {
+    conditions.push("kind = ?");
+    binds.push(kind);
+  }
+  if (category) {
+    conditions.push("category = ?");
+    binds.push(category);
+  }
+  if (query) {
+    conditions.push(`(
+      description LIKE ? ESCAPE '\\' OR
+      raw_text LIKE ? ESCAPE '\\' OR
+      category LIKE ? ESCAPE '\\' OR
+      subcategory LIKE ? ESCAPE '\\' OR
+      counterparty LIKE ? ESCAPE '\\'
+    )`);
+    const pattern = `%${escapeSqlLike(query)}%`;
+    binds.push(pattern, pattern, pattern, pattern, pattern);
+  }
+
+  const items = await env.DB.prepare(
+    `SELECT id, local_date, kind, amount_minor, currency, category, subcategory, counterparty, description, raw_text, status, created_at, updated_at
+    FROM transactions
+    WHERE ${conditions.join(" AND ")}
+    ORDER BY local_date DESC, id DESC
+    LIMIT ?`
+  )
+    .bind(...binds, safeLimit)
+    .all();
+
+  const categories = await env.DB.prepare(
+    `SELECT DISTINCT category
+    FROM transactions
+    WHERE user_id = ? AND status = ? AND currency = 'KZT' AND local_date BETWEEN ? AND ? AND category IS NOT NULL AND category != ''
+    ORDER BY category`
+  )
+    .bind(userId, status, bounds.start, bounds.end)
+    .all();
+
+  return {
+    items: items.results || [],
+    categories: (categories.results || []).map((row) => row.category).filter(Boolean)
+  };
+}
+
+async function getTransactionById(env, userId, id) {
+  return env.DB.prepare(
+    `SELECT id, local_date, kind, amount_minor, currency, category, subcategory, counterparty, description, raw_text, status, deleted_at, created_at, updated_at
+    FROM transactions
+    WHERE user_id = ? AND id = ?`
+  )
+    .bind(userId, id)
+    .first();
+}
+
 async function handleLast(env, chatId, user, arg) {
   const normalizedArg = String(arg || "").trim().toLowerCase();
   const showDeleted = ["deleted", "delete", "удаленные", "удалённые", "удалено"].includes(normalizedArg);
@@ -1116,15 +1277,7 @@ async function restoreById(env, chatId, user, arg) {
     return;
   }
 
-  const now = new Date().toISOString();
-  await env.DB.prepare(
-    `UPDATE transactions
-    SET status = 'active', deleted_at = NULL, updated_at = ?
-    WHERE user_id = ? AND id = ? AND status = 'deleted'`
-  )
-    .bind(now, user.id, id)
-    .run();
-  await audit(env, user.id, id, "restore", { restored_at: now });
+  await restoreTransaction(env, user.id, id, "restore");
 
   await sendMessage(
     env,
@@ -1143,6 +1296,18 @@ async function softDelete(env, userId, transactionId, action) {
     .bind(now, now, userId, transactionId)
     .run();
   await audit(env, userId, transactionId, action, { deleted_at: now });
+}
+
+async function restoreTransaction(env, userId, transactionId, action) {
+  const now = new Date().toISOString();
+  await env.DB.prepare(
+    `UPDATE transactions
+    SET status = 'active', deleted_at = NULL, updated_at = ?
+    WHERE user_id = ? AND id = ? AND status = 'deleted'`
+  )
+    .bind(now, userId, transactionId)
+    .run();
+  await audit(env, userId, transactionId, action, { restored_at: now });
 }
 
 function formatBriefTransaction(row) {
@@ -1356,6 +1521,22 @@ function isAllowed(env, telegramUserId) {
   return ids.includes(telegramUserId);
 }
 
+function normalizeTransactionStatus(status) {
+  return status === "deleted" ? "deleted" : "active";
+}
+
+function normalizeTransactionKind(kind) {
+  const value = String(kind || "").trim();
+  if (!value || value === "all") return null;
+  return TRANSACTION_KINDS.has(value) ? value : null;
+}
+
+function normalizeLimit(limit, defaultValue, maxValue) {
+  const value = Number(limit);
+  if (!Number.isInteger(value) || value <= 0) return defaultValue;
+  return Math.min(value, maxValue);
+}
+
 function normalizePeriod(period) {
   const value = String(period || "month");
   if (["today", "yesterday", "week", "month", "last_7_days", "last_30_days"].includes(value)) return value;
@@ -1485,6 +1666,10 @@ function limitText(value, maxLength) {
   return text.slice(0, maxLength).trim();
 }
 
+function escapeSqlLike(value) {
+  return String(value || "").replace(/[\\%_]/g, (char) => `\\${char}`);
+}
+
 function csvCell(value) {
   if (value === null || value === undefined) return "";
   let text = String(value);
@@ -1599,902 +1784,4 @@ function timingSafeEqualHex(a, b) {
     diff |= left.charCodeAt(index) ^ right.charCodeAt(index);
   }
   return diff === 0;
-}
-
-function miniAppHtml() {
-  return `<!doctype html>
-<html lang="ru">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>ResidualMap</title>
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <style>
-    :root {
-      color-scheme: light;
-      --page: #f6f1e9;
-      --page-2: #edf7f2;
-      --ink: #18212f;
-      --muted: #738093;
-      --soft: rgba(255, 255, 255, 0.78);
-      --solid: #ffffff;
-      --line: rgba(40, 51, 69, 0.10);
-      --shadow: 0 22px 60px rgba(45, 51, 70, 0.13);
-      --lavender: #8b7cf6;
-      --mint: #64c3a0;
-      --rose: #f07f9a;
-      --peach: #f3b477;
-      --sky: #7db7f0;
-      --plum: #9d7bd8;
-      --amber: #d99f3d;
-    }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      min-height: 100vh;
-      color: var(--ink);
-      background:
-        radial-gradient(circle at 12% -8%, rgba(139, 124, 246, 0.25), transparent 34%),
-        radial-gradient(circle at 92% 5%, rgba(100, 195, 160, 0.26), transparent 30%),
-        linear-gradient(135deg, var(--page) 0%, var(--page-2) 100%);
-      font: 15px/1.42 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    }
-    .app {
-      width: min(1040px, 100%);
-      margin: 0 auto;
-      padding: 18px 14px max(28px, env(safe-area-inset-bottom));
-    }
-    .topbar {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      margin-bottom: 14px;
-    }
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      min-width: 0;
-    }
-    .mark {
-      width: 38px;
-      height: 38px;
-      display: grid;
-      place-items: center;
-      border-radius: 8px;
-      background: linear-gradient(135deg, #ffffff, #e9fff5);
-      border: 1px solid rgba(255, 255, 255, 0.7);
-      box-shadow: var(--shadow);
-      color: #2c7b63;
-      font-weight: 850;
-    }
-    .brand-title {
-      font-size: 18px;
-      font-weight: 850;
-      letter-spacing: 0;
-    }
-    .brand-sub {
-      color: var(--muted);
-      font-size: 12px;
-      margin-top: 1px;
-      overflow-wrap: anywhere;
-    }
-    .ghost {
-      min-height: 36px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: rgba(255, 255, 255, 0.66);
-      color: var(--ink);
-      padding: 8px 11px;
-      font: inherit;
-      font-weight: 680;
-      box-shadow: 0 8px 22px rgba(45, 51, 70, 0.08);
-    }
-    .hero {
-      display: grid;
-      grid-template-columns: minmax(0, 1.35fr) minmax(220px, 0.65fr);
-      gap: 12px;
-      margin-bottom: 12px;
-    }
-    .hero-main, .hero-side, .panel, .insight {
-      border: 1px solid rgba(255, 255, 255, 0.72);
-      border-radius: 8px;
-      background: var(--soft);
-      box-shadow: var(--shadow);
-      backdrop-filter: blur(18px);
-    }
-    .hero-main {
-      position: relative;
-      overflow: hidden;
-      padding: 20px;
-      min-height: 174px;
-      background:
-        linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(245, 238, 255, 0.68)),
-        radial-gradient(circle at 90% 12%, rgba(240, 127, 154, 0.22), transparent 34%);
-    }
-    .hero-main:after {
-      content: "";
-      position: absolute;
-      right: -56px;
-      bottom: -72px;
-      width: 220px;
-      height: 220px;
-      border-radius: 50%;
-      border: 34px solid rgba(125, 183, 240, 0.14);
-    }
-    .eyebrow {
-      color: #68758a;
-      font-size: 12px;
-      font-weight: 760;
-      text-transform: uppercase;
-      letter-spacing: 0;
-    }
-    h1 {
-      position: relative;
-      z-index: 1;
-      margin: 8px 0 4px;
-      font-size: 44px;
-      line-height: 1;
-      letter-spacing: 0;
-    }
-    .hero-meta {
-      position: relative;
-      z-index: 1;
-      color: var(--muted);
-      font-size: 13px;
-      max-width: 620px;
-    }
-    .hero-side {
-      display: grid;
-      align-content: space-between;
-      gap: 16px;
-      padding: 18px;
-      background: linear-gradient(160deg, rgba(29, 39, 57, 0.93), rgba(50, 44, 78, 0.9));
-      color: #ffffff;
-    }
-    .side-label {
-      color: rgba(255, 255, 255, 0.66);
-      font-size: 12px;
-      font-weight: 720;
-    }
-    .side-value {
-      font-size: 24px;
-      font-weight: 850;
-      margin-top: 4px;
-      overflow-wrap: anywhere;
-    }
-    .side-note {
-      color: rgba(255, 255, 255, 0.66);
-      font-size: 12px;
-    }
-    .periods {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 8px;
-      margin: 12px 0;
-    }
-    .periods button {
-      min-height: 44px;
-      border: 1px solid rgba(40, 51, 69, 0.11);
-      border-radius: 8px;
-      background: rgba(255, 255, 255, 0.68);
-      color: var(--ink);
-      font: inherit;
-      font-weight: 760;
-      box-shadow: 0 8px 20px rgba(45, 51, 70, 0.06);
-    }
-    .periods button.active {
-      border-color: transparent;
-      background: linear-gradient(135deg, var(--lavender), #b69df7);
-      color: #ffffff;
-    }
-    .insights {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 10px;
-      margin-bottom: 12px;
-    }
-    .insight {
-      padding: 13px;
-      min-width: 0;
-    }
-    .label {
-      color: var(--muted);
-      font-size: 12px;
-      font-weight: 680;
-      margin-bottom: 5px;
-    }
-    .value {
-      font-size: 18px;
-      font-weight: 850;
-      overflow-wrap: anywhere;
-    }
-    .hint {
-      margin-top: 4px;
-      color: var(--muted);
-      font-size: 12px;
-      overflow-wrap: anywhere;
-    }
-    .dashboard {
-      display: grid;
-      grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
-      gap: 12px;
-    }
-    .panel {
-      padding: 16px;
-      min-width: 0;
-    }
-    .wide { grid-column: span 2; }
-    .panel-head {
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 12px;
-      margin-bottom: 12px;
-    }
-    .panel h2 {
-      margin: 0;
-      font-size: 17px;
-      letter-spacing: 0;
-    }
-    .panel-caption {
-      color: var(--muted);
-      font-size: 12px;
-      margin-top: 3px;
-    }
-    .chart-wrap {
-      min-height: 260px;
-    }
-    svg {
-      display: block;
-      width: 100%;
-      height: auto;
-    }
-    .legend {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      margin-top: 8px;
-      color: var(--muted);
-      font-size: 12px;
-    }
-    .legend span {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .dot {
-      width: 9px;
-      height: 9px;
-      border-radius: 50%;
-      background: var(--lavender);
-    }
-    .dot.income { background: var(--mint); }
-    .dot.expense { background: var(--rose); }
-    .category-layout {
-      display: grid;
-      grid-template-columns: 158px 1fr;
-      gap: 16px;
-      align-items: center;
-    }
-    .donut {
-      width: 150px;
-      height: 150px;
-      border-radius: 50%;
-      display: grid;
-      place-items: center;
-      margin: 0 auto;
-      box-shadow: inset 0 0 0 1px rgba(40, 51, 69, 0.08);
-    }
-    .donut-core {
-      width: 92px;
-      height: 92px;
-      display: grid;
-      place-items: center;
-      border-radius: 50%;
-      background: rgba(255, 255, 255, 0.92);
-      text-align: center;
-      padding: 9px;
-      font-size: 11px;
-      color: var(--muted);
-    }
-    .donut-core strong {
-      display: block;
-      color: var(--ink);
-      font-size: 13px;
-      margin-top: 2px;
-      overflow-wrap: anywhere;
-    }
-    .list {
-      display: grid;
-      gap: 8px;
-    }
-    .row {
-      display: grid;
-      grid-template-columns: 1fr auto;
-      gap: 10px;
-      padding: 10px 0;
-      border-top: 1px solid var(--line);
-    }
-    .row:first-child { border-top: 0; padding-top: 0; }
-    .title { font-weight: 760; overflow-wrap: anywhere; }
-    .meta { color: var(--muted); font-size: 12px; margin-top: 2px; overflow-wrap: anywhere; }
-    .amount { font-weight: 850; white-space: nowrap; }
-    .expense { color: #c85072; }
-    .income { color: #32876a; }
-    .debt { color: #b87920; }
-    .progress {
-      height: 7px;
-      border-radius: 999px;
-      background: rgba(40, 51, 69, 0.08);
-      overflow: hidden;
-      margin-top: 7px;
-    }
-    .progress-fill {
-      height: 100%;
-      border-radius: inherit;
-      background: linear-gradient(90deg, var(--lavender), var(--rose));
-    }
-    .empty, .error {
-      min-height: 132px;
-      display: grid;
-      place-items: center;
-      color: var(--muted);
-      text-align: center;
-      padding: 22px;
-      border: 1px dashed rgba(40, 51, 69, 0.16);
-      border-radius: 8px;
-      background: rgba(255, 255, 255, 0.42);
-    }
-    .error { color: #c85072; }
-    .skeleton {
-      min-height: 96px;
-      border-radius: 8px;
-      background: linear-gradient(90deg, rgba(255,255,255,0.44), rgba(255,255,255,0.78), rgba(255,255,255,0.44));
-      background-size: 200% 100%;
-      animation: shine 1.4s infinite linear;
-    }
-    @keyframes shine {
-      from { background-position: 0 0; }
-      to { background-position: -200% 0; }
-    }
-    @media (max-width: 820px) {
-      .hero, .dashboard, .category-layout { grid-template-columns: 1fr; }
-      .wide { grid-column: span 1; }
-      .insights { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    }
-    @media (max-width: 520px) {
-      .app { padding: 14px 10px max(24px, env(safe-area-inset-bottom)); }
-      .topbar { align-items: flex-start; }
-      .ghost { padding: 8px 9px; }
-      h1 { font-size: 32px; }
-      .hero-main { padding: 16px; min-height: 150px; }
-      .periods { gap: 6px; }
-      .periods button { min-height: 42px; padding: 8px 5px; }
-      .insights { gap: 8px; }
-      .panel { padding: 13px; }
-      .row { grid-template-columns: 1fr; gap: 3px; }
-      .amount { white-space: normal; }
-    }
-  </style>
-</head>
-<body>
-  <main class="app">
-    <header class="topbar">
-      <div class="brand">
-        <div class="mark">R</div>
-        <div>
-          <div class="brand-title">ResidualMap</div>
-          <div class="brand-sub" id="profile">Загрузка данных...</div>
-        </div>
-      </div>
-      <button class="ghost" id="refresh">Обновить</button>
-    </header>
-
-    <section class="hero">
-      <div class="hero-main">
-        <div class="eyebrow" id="periodName">Месяц</div>
-        <h1 id="heroSpend">0 KZT</h1>
-        <div class="hero-meta" id="heroMeta">Расходы за выбранный период</div>
-      </div>
-      <aside class="hero-side">
-        <div>
-          <div class="side-label">Баланс периода</div>
-          <div class="side-value" id="netFlow">0 KZT</div>
-        </div>
-        <div class="side-note" id="sideNote">Доходы минус расходы. Долги показаны отдельно.</div>
-      </aside>
-    </section>
-
-    <nav class="periods" id="periods">
-      <button data-period="today">Сегодня</button>
-      <button data-period="week">Неделя</button>
-      <button data-period="last_30_days">30 дней</button>
-      <button data-period="month" class="active">Месяц</button>
-    </nav>
-
-    <section class="insights" id="insights">
-      <div class="skeleton"></div>
-      <div class="skeleton"></div>
-      <div class="skeleton"></div>
-      <div class="skeleton"></div>
-    </section>
-
-    <section class="dashboard">
-      <section class="panel wide">
-        <div class="panel-head">
-          <div>
-            <h2>Динамика</h2>
-            <div class="panel-caption">Расходы и доходы по дням</div>
-          </div>
-          <div class="panel-caption" id="rangeLabel"></div>
-        </div>
-        <div class="chart-wrap" id="dailyChart"></div>
-        <div class="legend">
-          <span><i class="dot expense"></i>Расходы</span>
-          <span><i class="dot income"></i>Доходы</span>
-        </div>
-      </section>
-
-      <section class="panel">
-        <div class="panel-head">
-          <div>
-            <h2>Категории</h2>
-            <div class="panel-caption">Куда ушли деньги</div>
-          </div>
-        </div>
-        <div class="category-layout">
-          <div>
-            <div class="donut" id="donut">
-              <div class="donut-core">Всего<strong id="donutTotal">0 KZT</strong></div>
-            </div>
-          </div>
-          <div class="list" id="categoryTotals"></div>
-        </div>
-      </section>
-
-      <section class="panel">
-        <div class="panel-head">
-          <div>
-            <h2>Детализация</h2>
-            <div class="panel-caption">Подкатегории расходов</div>
-          </div>
-        </div>
-        <div class="list" id="categories"></div>
-      </section>
-
-      <section class="panel">
-        <div class="panel-head">
-          <div>
-            <h2>Крупные траты</h2>
-            <div class="panel-caption">Самые заметные списания</div>
-          </div>
-        </div>
-        <div class="list" id="largest"></div>
-      </section>
-
-      <section class="panel">
-        <div class="panel-head">
-          <div>
-            <h2>Долги</h2>
-            <div class="panel-caption">Кто кому должен</div>
-          </div>
-        </div>
-        <div class="list" id="debts"></div>
-      </section>
-
-      <section class="panel wide">
-        <div class="panel-head">
-          <div>
-            <h2>Последние записи</h2>
-            <div class="panel-caption">Для проверки и удаления по ID</div>
-          </div>
-        </div>
-        <div class="list" id="recent"></div>
-      </section>
-    </section>
-  </main>
-
-  <script>
-    const tg = window.Telegram && window.Telegram.WebApp;
-    const colors = ["#8b7cf6", "#64c3a0", "#f07f9a", "#f3b477", "#7db7f0", "#9d7bd8", "#d99f3d", "#76c6d1", "#c9a66b", "#a3c47a"];
-    const state = { period: "month", data: null };
-
-    if (tg) {
-      tg.ready();
-      tg.expand();
-      if (tg.MainButton) tg.MainButton.hide();
-    }
-
-    document.getElementById("periods").addEventListener("click", function(event) {
-      const button = event.target.closest("button[data-period]");
-      if (!button) return;
-      state.period = button.dataset.period;
-      for (const item of document.querySelectorAll("#periods button")) {
-        item.classList.toggle("active", item === button);
-      }
-      load();
-    });
-
-    document.getElementById("refresh").addEventListener("click", load);
-
-    function money(minor, currency) {
-      const amount = Number(minor || 0) / 100;
-      return amount.toLocaleString("ru-RU", { maximumFractionDigits: 2 }) + " " + (currency || "KZT");
-    }
-
-    function primaryCurrency(summary, user) {
-      const totals = summary.totals_by_currency || [];
-      const preferred = totals.find(function(item) { return item.currency === user.currency; });
-      return (preferred || totals[0] || { currency: user.currency || "KZT" }).currency;
-    }
-
-    function selectedTotal(summary, currency) {
-      return (summary.totals_by_currency || []).find(function(item) { return item.currency === currency; }) || {};
-    }
-
-    function render(data) {
-      const user = data.user;
-      const summary = data.summary;
-      const currency = primaryCurrency(summary, user);
-      const total = selectedTotal(summary, currency);
-      const expense = Number(total.expense_minor || 0);
-      const income = Number(total.income_minor || 0);
-      const loanOut = Number(total.loan_out_minor || 0);
-      const net = income - expense;
-      const periodDays = dayCount(summary.period.start, summary.period.end);
-      const activeDays = buildDailySeries(summary, currency).filter(function(item) { return item.expense_minor > 0; }).length;
-      const topCategory = firstForCurrency(summary.category_totals || [], currency);
-      const largest = firstForCurrency(summary.largest_expenses || [], currency);
-
-      document.getElementById("profile").textContent = (user.currency || "KZT") + " · " + (user.timezone || "Asia/Qyzylorda");
-      document.getElementById("periodName").textContent = summary.period.label;
-      document.getElementById("heroSpend").textContent = money(expense, currency);
-      document.getElementById("heroMeta").textContent = "Расходы за период · " + formatRange(summary.period.start, summary.period.end) + " · " + plural(Number(summary.transaction_count || 0), "запись", "записи", "записей");
-      document.getElementById("netFlow").textContent = (net >= 0 ? "+" : "") + money(net, currency);
-      document.getElementById("sideNote").textContent = loanOut > 0 ? "Дано в долг: " + money(loanOut, currency) : "Доходы минус расходы. Долги показаны отдельно.";
-      document.getElementById("rangeLabel").textContent = formatRange(summary.period.start, summary.period.end);
-
-      renderInsights({
-        currency: currency,
-        expense: expense,
-        income: income,
-        loanOut: loanOut,
-        periodDays: periodDays,
-        activeDays: activeDays,
-        topCategory: topCategory,
-        largest: largest
-      });
-      renderDailyChart(summary, currency);
-      renderCategoryTotals(summary.category_totals || [], currency);
-      renderCategories(summary.categories || [], currency);
-      renderLargest(summary.largest_expenses || [], currency);
-      renderDebts(data.debts || [], currency);
-      renderRecent(data.recent || [], currency);
-    }
-
-    function renderInsights(model) {
-      const avg = model.periodDays ? Math.round(model.expense / model.periodDays) : 0;
-      const topText = model.topCategory ? model.topCategory.category : "Пока нет";
-      const largestText = model.largest ? money(model.largest.amount_minor, model.currency) : "Пока нет";
-      document.getElementById("insights").innerHTML = [
-        insight("Средний день", money(avg, model.currency), "по выбранному периоду"),
-        insight("Топ категория", topText, model.topCategory ? money(model.topCategory.amount_minor, model.currency) : "нет расходов"),
-        insight("Крупнейшая трата", largestText, model.largest ? (model.largest.description || model.largest.raw_text || "расход") : "нет расходов"),
-        insight("Активных дней", String(model.activeDays), "из " + model.periodDays)
-      ].join("");
-    }
-
-    function insight(label, value, hint) {
-      return "<article class='insight'><div class='label'>" + escapeHtml(label) + "</div><div class='value'>" + escapeHtml(value) + "</div><div class='hint'>" + escapeHtml(hint || "") + "</div></article>";
-    }
-
-    function renderDailyChart(summary, currency) {
-      const root = document.getElementById("dailyChart");
-      const series = buildDailySeries(summary, currency);
-      const hasValues = series.some(function(item) { return item.expense_minor > 0 || item.income_minor > 0; });
-      if (!hasValues) {
-        root.innerHTML = "<div class='empty'>За этот период пока нет активных записей. Добавьте трату в боте, и график появится здесь.</div>";
-        return;
-      }
-
-      const width = 760;
-      const height = 260;
-      const pad = { left: 52, right: 20, top: 22, bottom: 42 };
-      const plotW = width - pad.left - pad.right;
-      const plotH = height - pad.top - pad.bottom;
-      const max = Math.max.apply(null, series.map(function(item) { return Math.max(item.expense_minor, item.income_minor); }).concat([1]));
-      const step = series.length > 1 ? plotW / (series.length - 1) : plotW;
-      const barW = Math.max(5, Math.min(22, plotW / Math.max(series.length, 1) * 0.48));
-      const incomePoints = [];
-      let bars = "";
-
-      for (let i = 0; i < series.length; i += 1) {
-        const item = series[i];
-        const x = pad.left + (series.length > 1 ? i * step : plotW / 2);
-        const expenseH = item.expense_minor / max * plotH;
-        const barHeight = expenseH > 0 ? Math.max(2, expenseH) : 0;
-        bars += "<rect x='" + (x - barW / 2).toFixed(2) + "' y='" + (pad.top + plotH - barHeight).toFixed(2) + "' width='" + barW.toFixed(2) + "' height='" + barHeight.toFixed(2) + "' rx='5' fill='#f07f9a' opacity='0.86'></rect>";
-        const incomeY = pad.top + plotH - item.income_minor / max * plotH;
-        incomePoints.push([x, incomeY]);
-      }
-
-      const incomePath = incomePoints.map(function(point, index) {
-        return (index === 0 ? "M" : "L") + point[0].toFixed(2) + " " + point[1].toFixed(2);
-      }).join(" ");
-      const grid = [0, 0.25, 0.5, 0.75, 1].map(function(part) {
-        const y = pad.top + plotH * part;
-        return "<line x1='" + pad.left + "' y1='" + y.toFixed(2) + "' x2='" + (width - pad.right) + "' y2='" + y.toFixed(2) + "' stroke='rgba(40,51,69,0.08)' stroke-width='1'></line>";
-      }).join("");
-      const labels = buildChartLabels(series, pad, plotW, step);
-      const maxLabel = money(max, currency).replace(" " + currency, "");
-
-      root.innerHTML =
-        "<svg viewBox='0 0 " + width + " " + height + "' role='img' aria-label='Динамика расходов и доходов'>" +
-        "<rect x='0' y='0' width='" + width + "' height='" + height + "' rx='8' fill='rgba(255,255,255,0.48)'></rect>" +
-        grid +
-        "<text x='12' y='30' fill='#738093' font-size='12'>" + escapeHtml(maxLabel) + "</text>" +
-        bars +
-        "<path d='" + incomePath + "' fill='none' stroke='#64c3a0' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'></path>" +
-        incomePoints.map(function(point) { return "<circle cx='" + point[0].toFixed(2) + "' cy='" + point[1].toFixed(2) + "' r='4' fill='#64c3a0' stroke='white' stroke-width='2'></circle>"; }).join("") +
-        labels +
-        "</svg>";
-    }
-
-    function buildDailySeries(summary, currency) {
-      const days = enumerateDates(summary.period.start, summary.period.end);
-      const source = new Map();
-      for (const item of summary.by_day || []) {
-        if (item.currency !== currency) continue;
-        source.set(item.local_date, item);
-      }
-      return days.map(function(date) {
-        const item = source.get(date) || {};
-        return {
-          date: date,
-          expense_minor: Number(item.expense_minor || 0),
-          income_minor: Number(item.income_minor || 0),
-          count: Number(item.count || 0)
-        };
-      });
-    }
-
-    function buildChartLabels(series, pad, plotW, step) {
-      const maxLabels = Math.min(5, series.length);
-      const every = Math.max(1, Math.ceil(series.length / maxLabels));
-      const labels = [];
-      for (let i = 0; i < series.length; i += 1) {
-        if (i !== 0 && i !== series.length - 1 && i % every !== 0) continue;
-        const x = pad.left + (series.length > 1 ? i * step : plotW / 2);
-        labels.push("<text x='" + x.toFixed(2) + "' y='238' fill='#738093' font-size='12' text-anchor='middle'>" + escapeHtml(shortDate(series[i].date)) + "</text>");
-      }
-      return labels.join("");
-    }
-
-    function renderCategoryTotals(items, currency) {
-      const root = document.getElementById("categoryTotals");
-      const donut = document.getElementById("donut");
-      const totalEl = document.getElementById("donutTotal");
-      const filtered = items.filter(function(item) { return item.currency === currency && Number(item.amount_minor || 0) > 0; });
-      const total = filtered.reduce(function(sum, item) { return sum + Number(item.amount_minor || 0); }, 0);
-      totalEl.textContent = money(total, currency);
-
-      if (!filtered.length) {
-        donut.style.background = "conic-gradient(#e4e8ef 0deg 360deg)";
-        root.innerHTML = "<div class='empty'>Категории появятся после первой траты.</div>";
-        return;
-      }
-
-      let start = 0;
-      const segments = filtered.map(function(item, index) {
-        const end = start + Number(item.amount_minor || 0) / total * 360;
-        const segment = colors[index % colors.length] + " " + start.toFixed(2) + "deg " + end.toFixed(2) + "deg";
-        start = end;
-        return segment;
-      });
-      donut.style.background = "conic-gradient(" + segments.join(", ") + ")";
-
-      const max = Math.max.apply(null, filtered.map(function(item) { return Number(item.amount_minor || 0); }).concat([1]));
-      root.innerHTML = "";
-      for (let index = 0; index < filtered.length; index += 1) {
-        const item = filtered[index];
-        const pct = total ? Math.round(Number(item.amount_minor || 0) / total * 100) : 0;
-        const element = document.createElement("div");
-        element.className = "row";
-        element.innerHTML = "<div><div class='title'></div><div class='meta'></div><div class='progress'><div class='progress-fill'></div></div></div><div class='amount expense'></div>";
-        element.querySelector(".title").textContent = item.category;
-        element.querySelector(".meta").textContent = pct + "% · " + plural(Number(item.count || 0), "запись", "записи", "записей");
-        element.querySelector(".progress-fill").style.width = Math.max(4, Number(item.amount_minor || 0) / max * 100) + "%";
-        element.querySelector(".progress-fill").style.background = colors[index % colors.length];
-        element.querySelector(".amount").textContent = money(item.amount_minor, currency);
-        root.appendChild(element);
-      }
-    }
-
-    function renderCategories(items, currency) {
-      const root = document.getElementById("categories");
-      const filtered = items.filter(function(item) { return item.currency === currency; });
-      root.innerHTML = "";
-      if (!filtered.length) {
-        root.innerHTML = "<div class='empty'>Подкатегорий пока нет.</div>";
-        return;
-      }
-      const max = Math.max.apply(null, filtered.map(function(item) { return Number(item.amount_minor || 0); }).concat([1]));
-      for (const item of filtered.slice(0, 8)) {
-        root.appendChild(rowWithProgress(item.category + " > " + item.subcategory, plural(Number(item.count || 0), "запись", "записи", "записей"), money(item.amount_minor, currency), Number(item.amount_minor || 0) / max * 100, "expense"));
-      }
-    }
-
-    function renderLargest(items, currency) {
-      const root = document.getElementById("largest");
-      const filtered = items.filter(function(item) { return item.currency === currency; });
-      root.innerHTML = "";
-      if (!filtered.length) {
-        root.innerHTML = "<div class='empty'>Крупных трат пока нет.</div>";
-        return;
-      }
-      for (const item of filtered.slice(0, 5)) {
-        const title = item.description || item.raw_text || "Расход";
-        const meta = formatDate(item.local_date) + " · #" + item.id + " · " + [item.category, item.subcategory].filter(Boolean).join(" > ");
-        root.appendChild(row(title, meta, money(item.amount_minor, currency), "expense"));
-      }
-    }
-
-    function renderDebts(items, currency) {
-      const root = document.getElementById("debts");
-      root.innerHTML = "";
-      const filtered = items.filter(function(item) { return item.currency === currency; });
-      if (!filtered.length) {
-        root.innerHTML = "<div class='empty'>Открытых долгов нет.</div>";
-        return;
-      }
-      for (const item of filtered) {
-        if (Number(item.receivable_minor) > 0) {
-          root.appendChild(row(item.counterparty || "Без имени", "должен вам", money(item.receivable_minor, item.currency), "debt"));
-        }
-        if (Number(item.payable_minor) > 0) {
-          root.appendChild(row(item.counterparty || "Без имени", "вы должны", money(item.payable_minor, item.currency), "debt"));
-        }
-      }
-    }
-
-    function renderRecent(items, currency) {
-      const root = document.getElementById("recent");
-      root.innerHTML = "";
-      const filtered = items.filter(function(item) { return item.currency === currency; });
-      if (!filtered.length) {
-        root.innerHTML = "<div class='empty'>Записей пока нет.</div>";
-        return;
-      }
-      for (const item of filtered.slice(0, 14)) {
-        const meta = formatDate(item.local_date) + " · ID " + item.id + " · " + [kindLabel(item.kind), item.category, item.subcategory].filter(Boolean).join(" · ");
-        const tone = item.kind === "income" ? "income" : item.kind.indexOf("loan") >= 0 || item.kind.indexOf("borrow") >= 0 ? "debt" : "expense";
-        root.appendChild(row(item.description || item.raw_text || kindLabel(item.kind), meta, money(item.amount_minor, item.currency), tone));
-      }
-    }
-
-    function row(title, meta, amount, tone) {
-      const element = document.createElement("div");
-      element.className = "row";
-      element.innerHTML = "<div><div class='title'></div><div class='meta'></div></div><div class='amount'></div>";
-      element.querySelector(".title").textContent = title || "";
-      element.querySelector(".meta").textContent = meta || "";
-      const amountEl = element.querySelector(".amount");
-      amountEl.textContent = amount || "";
-      if (tone) amountEl.classList.add(tone);
-      return element;
-    }
-
-    function rowWithProgress(title, meta, amount, percent, tone) {
-      const element = document.createElement("div");
-      element.className = "row";
-      element.innerHTML = "<div><div class='title'></div><div class='meta'></div><div class='progress'><div class='progress-fill'></div></div></div><div class='amount'></div>";
-      element.querySelector(".title").textContent = title || "";
-      element.querySelector(".meta").textContent = meta || "";
-      element.querySelector(".progress-fill").style.width = Math.max(4, percent || 0) + "%";
-      const amountEl = element.querySelector(".amount");
-      amountEl.textContent = amount || "";
-      if (tone) amountEl.classList.add(tone);
-      return element;
-    }
-
-    function firstForCurrency(items, currency) {
-      return (items || []).find(function(item) { return item.currency === currency; }) || null;
-    }
-
-    function enumerateDates(start, end) {
-      const result = [];
-      const current = new Date(start + "T00:00:00Z");
-      const last = new Date(end + "T00:00:00Z");
-      while (current <= last && result.length < 370) {
-        result.push(current.toISOString().slice(0, 10));
-        current.setUTCDate(current.getUTCDate() + 1);
-      }
-      return result;
-    }
-
-    function dayCount(start, end) {
-      return enumerateDates(start, end).length || 1;
-    }
-
-    function shortDate(ymd) {
-      const parts = ymd.split("-");
-      return parts[2] + "." + parts[1];
-    }
-
-    function formatDate(ymd) {
-      return new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "short" }).format(new Date(ymd + "T00:00:00Z"));
-    }
-
-    function formatRange(start, end) {
-      if (start === end) return formatDate(start);
-      return formatDate(start) + " - " + formatDate(end);
-    }
-
-    function plural(value, one, few, many) {
-      const n = Math.abs(Number(value || 0));
-      const mod10 = n % 10;
-      const mod100 = n % 100;
-      const word = mod10 === 1 && mod100 !== 11 ? one : mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14) ? few : many;
-      return n.toLocaleString("ru-RU") + " " + word;
-    }
-
-    function kindLabel(kind) {
-      const labels = {
-        expense: "Расход",
-        income: "Доход",
-        loan_out: "Дал в долг",
-        loan_repayment: "Вернули долг",
-        borrow_in: "Взял в долг",
-        borrow_repayment: "Вернул долг",
-        transfer: "Перевод",
-        correction: "Коррекция"
-      };
-      return labels[kind] || kind;
-    }
-
-    function escapeHtml(value) {
-      return String(value == null ? "" : value)
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;");
-    }
-
-    function showError(message) {
-      document.getElementById("profile").textContent = "Ошибка загрузки";
-      document.getElementById("heroSpend").textContent = "Нет данных";
-      document.getElementById("heroMeta").textContent = message;
-      document.getElementById("insights").innerHTML = "<div class='error'>Не удалось загрузить мини-апп: " + escapeHtml(message) + "</div>";
-      document.getElementById("dailyChart").innerHTML = "<div class='error'>" + escapeHtml(message) + "</div>";
-    }
-
-    async function load() {
-      if (!tg || !tg.initData) {
-        showError("Откройте панель из Telegram, чтобы пройти проверку доступа.");
-        return;
-      }
-      document.getElementById("refresh").disabled = true;
-      try {
-        const response = await fetch("/api/app-data", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ initData: tg.initData, period: state.period })
-        });
-        const data = await response.json();
-        if (!response.ok || !data.ok) throw new Error(data.error || "Ошибка загрузки");
-        state.data = data;
-        render(data);
-      } catch (error) {
-        showError(error.message);
-      } finally {
-        document.getElementById("refresh").disabled = false;
-      }
-    }
-
-    load();
-  </script>
-</body>
-</html>`;
 }

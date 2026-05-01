@@ -19,8 +19,11 @@ Telegram bot for personal expense tracking on Cloudflare Workers, Cloudflare D1,
 - `/week` - summary for the current week.
 - `/month` - summary for the current month.
 - `/debts` - open debts.
+- `/last` - show latest active records with IDs.
+- `/last deleted` - show latest deleted records.
 - `/undo` - delete the latest active record.
 - `/delete 123` - delete record by ID.
+- `/restore 123` - restore a deleted record by ID.
 - `/export` - download CSV export.
 - `/settings` - show current bot settings.
 

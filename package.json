@@ -4,12 +4,13 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "check": "node --check src/worker.js && node --check src/mini-app.js && node test/worker.test.js",
     "deploy": "wrangler deploy",
     "dev": "wrangler dev",
     "db:create": "wrangler d1 create residualmap_expenses",
     "db:migrate": "wrangler d1 migrations apply residualmap_expenses --remote"
   },
   "devDependencies": {
-    "wrangler": "latest"
+    "wrangler": "4.34.0"
   }
 }

@@ -9,6 +9,7 @@ Telegram bot for personal expense tracking on Cloudflare Workers, Cloudflare D1,
 - Analytics totals are calculated with SQL first, then optionally summarized by AI.
 - Deletions are soft deletes and are recorded in `audit_log`.
 - Telegram access is restricted by `ALLOWED_TELEGRAM_IDS`.
+- v1 is KZT-only. Messages classified as another currency are rejected instead of being hidden in analytics.
 
 ## Commands
 
@@ -47,11 +48,19 @@ Mini App data is served through Telegram-authenticated JSON endpoints:
 Non-secret defaults live in `wrangler.toml` under `[vars]`, so GitHub deploys keep them attached to the Worker:
 
 - `ALLOWED_TELEGRAM_IDS`
-- `DEFAULT_CURRENCY`
+- `DEFAULT_CURRENCY` (keep `KZT` for v1)
 - `DEFAULT_TIMEZONE`
 - `OPENAI_MODEL_PARSE`
 - `OPENAI_MODEL_ANALYTICS`
 - `MINI_APP_URL`
+
+## Local checks
+
+Run the syntax checks and focused parser tests before deploying:
+
+```sh
+npm run check
+```
 
 ## Required Cloudflare secrets
 
@@ -68,6 +77,14 @@ Non-secret defaults live in `wrangler.toml` under `[vars]`, so GitHub deploys ke
 4. Add the required secrets to the Worker.
 5. Deploy the Worker.
 6. Set the Telegram webhook with the Worker URL and `TELEGRAM_WEBHOOK_SECRET`.
+
+Admin webhook endpoints are POST-only and expect `Authorization: Bearer <SETUP_TOKEN>`:
+
+```sh
+curl -X POST -H "Authorization: Bearer $SETUP_TOKEN" https://your-worker.example/admin/set-webhook
+curl -X POST -H "Authorization: Bearer $SETUP_TOKEN" https://your-worker.example/admin/webhook-info
+curl -X POST -H "Authorization: Bearer $SETUP_TOKEN" https://your-worker.example/admin/delete-webhook
+```
 
 ## GitHub workflow
 

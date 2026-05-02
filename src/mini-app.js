@@ -576,21 +576,6 @@ export function miniAppHtml() {
       border-bottom: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
       transition: padding .18s ease, box-shadow .18s ease;
     }
-    body.is-scrolled .top {
-      padding-top: 5px;
-      box-shadow: 0 10px 28px rgba(15,23,42,.08);
-    }
-    body.is-scrolled .brand-row {
-      margin-bottom: 6px;
-    }
-    body.is-scrolled .mark {
-      width: 32px;
-      height: 32px;
-    }
-    body.is-scrolled .brand-sub,
-    body.is-scrolled .sync-status {
-      display: none;
-    }
     .brand-row {
       margin-bottom: 9px;
     }
@@ -655,6 +640,9 @@ export function miniAppHtml() {
       background: var(--surface-soft);
       border: 1px solid var(--line);
       box-shadow: none;
+    }
+    .tabs.compact {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
     .segments button,
     .tabs button {
@@ -805,10 +793,39 @@ export function miniAppHtml() {
       background: var(--income);
     }
     .category-layout {
-      display: block;
+      display: grid;
+      grid-template-columns: 160px minmax(0, 1fr);
+      gap: 16px;
+      align-items: center;
     }
     .donut {
-      display: none;
+      width: 150px;
+      height: 150px;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      background: conic-gradient(color-mix(in srgb, var(--muted) 22%, transparent) 0deg 360deg);
+      box-shadow: inset 0 0 0 1px var(--line);
+    }
+    .donut-core {
+      width: 92px;
+      height: 92px;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      background: var(--surface);
+      color: var(--muted);
+      text-align: center;
+      padding: 10px;
+      font-size: 14px;
+      line-height: 1.2;
+    }
+    .donut-core strong {
+      display: block;
+      color: var(--text);
+      font-size: 16px;
+      font-weight: 790;
+      overflow-wrap: anywhere;
     }
     .list {
       gap: 0;
@@ -1032,7 +1049,8 @@ export function miniAppHtml() {
     }
     @media (max-width: 820px) {
       .hero,
-      .dashboard {
+      .dashboard,
+      .category-layout {
         grid-template-columns: 1fr;
       }
       .wide {
@@ -1136,10 +1154,10 @@ export function miniAppHtml() {
         <button data-period="last_30_days" aria-pressed="false">30 дн.</button>
         <button data-period="month" class="active" aria-pressed="true">Месяц</button>
       </nav>
-      <nav class="tabs" id="tabs" role="tablist" aria-label="Разделы панели">
+      <nav class="tabs compact" id="tabs" role="tablist" aria-label="Разделы панели">
         <button data-tab="overview" class="active" role="tab" aria-selected="true" aria-controls="view-overview">Обзор</button>
         <button data-tab="records" role="tab" aria-selected="false" aria-controls="view-records">Записи</button>
-        <button data-tab="debts" role="tab" aria-selected="false" aria-controls="view-debts">Долги</button>
+        <button data-tab="debts" role="tab" aria-selected="false" aria-controls="view-debts" hidden>Долги</button>
       </nav>
     </section>
 
@@ -1156,7 +1174,7 @@ export function miniAppHtml() {
             <div class="side-label">Баланс периода</div>
             <div class="side-value" id="netFlow">0 ₸</div>
           </div>
-          <div class="caption" id="sideNote">Доходы минус личные расходы. Долги показаны отдельно.</div>
+          <div class="caption" id="sideNote">Доходы минус личные расходы.</div>
         </aside>
       </section>
 
@@ -1344,7 +1362,6 @@ export function miniAppHtml() {
     });
     document.getElementById("sheetBackdrop").addEventListener("keydown", handleSheetKeydown);
     document.getElementById("sheetAction").addEventListener("click", runSheetAction);
-    window.addEventListener("scroll", handleScroll, { passive: true });
     window.addEventListener("resize", scheduleChartRerender);
 
     function setActive(selector, active) {
@@ -1358,7 +1375,6 @@ export function miniAppHtml() {
 
     function setupTelegramShell() {
       applyTelegramTheme();
-      handleScroll();
       if (!tg) return;
       tg.ready();
       tg.expand();
@@ -1394,10 +1410,6 @@ export function miniAppHtml() {
 
     function setCssVar(name, value) {
       if (value) document.documentElement.style.setProperty(name, value);
-    }
-
-    function handleScroll() {
-      document.body.classList.toggle("is-scrolled", window.scrollY > 12);
     }
 
     function scheduleChartRerender() {
@@ -1482,7 +1494,6 @@ export function miniAppHtml() {
       const expense = Number(total.expense_minor || 0);
       const income = Number(total.income_minor || 0);
       const net = income - expense;
-      const loanOut = Number(total.loan_out_minor || 0);
       const familyHelp = selectedKzt(summary.family_help || []);
       const familyHelpMinor = Number(familyHelp.amount_minor || 0);
       const periodDays = dayCount(summary.period.start, summary.period.end);
@@ -1495,11 +1506,10 @@ export function miniAppHtml() {
       document.getElementById("heroSpend").textContent = money(expense);
       document.getElementById("heroMeta").textContent = "Личные расходы · " + formatRange(summary.period.start, summary.period.end) + " · " + plural(summary.transaction_count || 0, "запись", "записи", "записей");
       document.getElementById("netFlow").textContent = signedMoney(net);
-      document.getElementById("sideNote").textContent = loanOut > 0
-        ? "Дано в долг: " + money(loanOut)
-        : "Доходы минус личные расходы. Долги и помощь семье показаны отдельно.";
+      document.getElementById("sideNote").textContent = "Доходы минус личные расходы.";
       document.getElementById("insightText").textContent = insightText(expense, income, topCategory, topCategoryPct, activeDays, periodDays);
       document.getElementById("rangeLabel").textContent = formatRange(summary.period.start, summary.period.end);
+      updateDebtsTab(data.debts || []);
       document.getElementById("metrics").innerHTML = [
         metric("Доходы", money(income), "поступления", "income"),
         metric("Чистый поток", signedMoney(net), "доходы минус расходы", net >= 0 ? "income" : "expense"),
@@ -1521,6 +1531,26 @@ export function miniAppHtml() {
       }
       if (income > 0) return "Личных расходов пока нет; доходы уже учтены в чистом потоке.";
       return "За этот период пока нет личных расходов. Добавьте запись в чате, и здесь появится аналитика.";
+    }
+
+    function updateDebtsTab(items) {
+      const button = document.querySelector("[data-tab='debts']");
+      const tabs = document.getElementById("tabs");
+      const hasDebts = hasOpenDebts(items);
+      button.hidden = !hasDebts;
+      tabs.classList.toggle("compact", !hasDebts);
+      if (!hasDebts && state.tab === "debts") {
+        state.tab = "overview";
+        const overviewButton = document.querySelector("[data-tab='overview']");
+        setActive("#tabs button", overviewButton);
+        for (const view of document.querySelectorAll(".view")) view.classList.toggle("active", view.id === "view-overview");
+      }
+    }
+
+    function hasOpenDebts(items) {
+      return kztItems(items).some(function(item) {
+        return Number(item.receivable_minor || 0) > 0 || Number(item.payable_minor || 0) > 0;
+      });
     }
 
     function metric(label, value, hint, tone) {
@@ -1598,14 +1628,23 @@ export function miniAppHtml() {
 
     function renderCategoryTotals(items) {
       const root = document.getElementById("categoryTotals");
+      const donut = document.getElementById("donut");
       const totalEl = document.getElementById("donutTotal");
       const filtered = kztItems(items).filter(function(item) { return Number(item.amount_minor || 0) > 0; });
       const total = filtered.reduce(function(sum, item) { return sum + Number(item.amount_minor || 0); }, 0);
       totalEl.textContent = money(total);
       if (!filtered.length) {
+        donut.style.background = "conic-gradient(color-mix(in srgb, var(--muted) 22%, transparent) 0deg 360deg)";
         root.innerHTML = "<div class='empty'>Категории появятся после первой личной траты в выбранном периоде.</div>";
         return;
       }
+      let start = 0;
+      donut.style.background = "conic-gradient(" + filtered.map(function(item, index) {
+        const end = start + Number(item.amount_minor || 0) / total * 360;
+        const part = colors[index % colors.length] + " " + start.toFixed(2) + "deg " + end.toFixed(2) + "deg";
+        start = end;
+        return part;
+      }).join(", ") + ")";
       root.innerHTML = "";
       for (let index = 0; index < Math.min(filtered.length, 5); index += 1) {
         const item = filtered[index];
@@ -1969,6 +2008,8 @@ export function miniAppHtml() {
     function showAccessError(message) {
       document.getElementById("profile").textContent = "Ошибка доступа";
       document.getElementById("syncStatus").textContent = "Нужен запуск из Telegram";
+      document.querySelector("[data-tab='debts']").hidden = true;
+      document.getElementById("tabs").classList.add("compact");
       document.getElementById("heroSpend").textContent = "Нет данных";
       document.getElementById("heroMeta").textContent = message;
       document.getElementById("insightText").textContent = "Откройте Mini App из Telegram, чтобы увидеть личную аналитику.";

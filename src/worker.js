@@ -1,6 +1,28 @@
 import { miniAppHtml as renderMiniAppHtml } from "./mini-app.js";
 
 const TELEGRAM_API = "https://api.telegram.org/bot";
+const ONLY_SUPPORTED_CURRENCY = "KZT";
+const UPDATE_PROCESSING_STALE_MS = 10 * 60 * 1000;
+
+const SECURITY_HEADERS = {
+  "X-Content-Type-Options": "nosniff",
+  "Referrer-Policy": "no-referrer",
+  "Permissions-Policy": "camera=(), microphone=(), geolocation=()"
+};
+
+const HTML_SECURITY_HEADERS = {
+  ...SECURITY_HEADERS,
+  "Content-Security-Policy": [
+    "default-src 'none'",
+    "script-src 'self' 'unsafe-inline' https://telegram.org",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data:",
+    "connect-src 'self'",
+    "base-uri 'none'",
+    "form-action 'none'",
+    "frame-ancestors https://web.telegram.org https://*.telegram.org"
+  ].join("; ")
+};
 
 const TRANSACTION_KINDS = new Set([
   "expense",
@@ -161,20 +183,26 @@ export default {
       if (url.pathname === "/app") {
         return html(renderMiniAppHtml());
       }
-      if (url.pathname === "/admin/set-webhook") {
-        return handleSetWebhook(url, env);
-      }
-      if (url.pathname === "/admin/webhook-info") {
-        return handleWebhookInfo(url, env);
-      }
-      if (url.pathname === "/admin/delete-webhook") {
-        return handleDeleteWebhook(url, env);
+      if (url.pathname.startsWith("/admin/")) {
+        return new Response("Method not allowed", { status: 405, headers: SECURITY_HEADERS });
       }
       return json({
         ok: true,
         service: "residualmap-bot",
         time: new Date().toISOString()
       });
+    }
+
+    if (request.method === "POST" && url.pathname === "/admin/set-webhook") {
+      return handleSetWebhook(request, url, env);
+    }
+
+    if (request.method === "POST" && url.pathname === "/admin/webhook-info") {
+      return handleWebhookInfo(request, env);
+    }
+
+    if (request.method === "POST" && url.pathname === "/admin/delete-webhook") {
+      return handleDeleteWebhook(request, env);
     }
 
     if (request.method === "POST" && url.pathname === "/api/app-data") {
@@ -198,7 +226,7 @@ export default {
       return new Response("TELEGRAM_WEBHOOK_SECRET is not configured", { status: 500 });
     }
     const actualSecret = request.headers.get("X-Telegram-Bot-Api-Secret-Token");
-    if (actualSecret !== expectedSecret) {
+    if (!timingSafeEqualString(actualSecret, expectedSecret)) {
       return new Response("Unauthorized", { status: 401 });
     }
 
@@ -216,8 +244,8 @@ export default {
   }
 };
 
-async function handleSetWebhook(url, env) {
-  const auth = requireSetupToken(url, env);
+async function handleSetWebhook(request, url, env) {
+  const auth = requireSetupToken(request, env);
   if (auth) return auth;
 
   const webhookUrl = `${url.origin}/telegram`;
@@ -240,8 +268,8 @@ async function handleSetWebhook(url, env) {
   }, { status: response.ok ? 200 : 502 });
 }
 
-async function handleWebhookInfo(url, env) {
-  const auth = requireSetupToken(url, env);
+async function handleWebhookInfo(request, env) {
+  const auth = requireSetupToken(request, env);
   if (auth) return auth;
 
   const response = await fetch(`${TELEGRAM_API}${env.TELEGRAM_BOT_TOKEN}/getWebhookInfo`);
@@ -249,8 +277,8 @@ async function handleWebhookInfo(url, env) {
   return json({ ok: response.ok, telegram: data }, { status: response.ok ? 200 : 502 });
 }
 
-async function handleDeleteWebhook(url, env) {
-  const auth = requireSetupToken(url, env);
+async function handleDeleteWebhook(request, env) {
+  const auth = requireSetupToken(request, env);
   if (auth) return auth;
 
   const response = await fetch(`${TELEGRAM_API}${env.TELEGRAM_BOT_TOKEN}/deleteWebhook`, {
@@ -351,12 +379,18 @@ async function handleMiniAppTransactionAction(request, env) {
     if (row.status !== "active") {
       return json({ ok: false, error: "Transaction is already deleted" }, { status: 409 });
     }
-    await softDelete(env, user.id, id, "mini_app_delete");
+    const changed = await softDelete(env, user.id, id, "mini_app_delete");
+    if (!changed) {
+      return json({ ok: false, error: "Transaction was already changed" }, { status: 409 });
+    }
   } else {
     if (row.status !== "deleted") {
       return json({ ok: false, error: "Transaction is not deleted" }, { status: 409 });
     }
-    await restoreTransaction(env, user.id, id, "mini_app_restore");
+    const changed = await restoreTransaction(env, user.id, id, "mini_app_restore");
+    if (!changed) {
+      return json({ ok: false, error: "Transaction was already changed" }, { status: 409 });
+    }
   }
 
   return json({
@@ -394,12 +428,13 @@ async function authenticateMiniAppRequest(request, env) {
   return { ok: true, body, user: await upsertUser(env, validation.user) };
 }
 
-function requireSetupToken(url, env) {
+function requireSetupToken(request, env) {
   if (!env.SETUP_TOKEN) {
-    return json({ ok: false, error: "SETUP_TOKEN is not configured" }, { status: 500 });
+    return json({ ok: false, error: "SETUP_TOKEN is not configured" }, { status: 500, headers: noStoreHeaders() });
   }
-  if (url.searchParams.get("token") !== env.SETUP_TOKEN) {
-    return json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  const token = bearerToken(request.headers.get("Authorization"));
+  if (!token || !timingSafeEqualString(token, env.SETUP_TOKEN)) {
+    return json({ ok: false, error: "Unauthorized" }, { status: 401, headers: noStoreHeaders() });
   }
   return null;
 }
@@ -423,32 +458,35 @@ async function handleTelegramUpdate(update, env) {
   }
 
   const updateId = String(update.update_id ?? `${chatId}:${message.message_id}`);
-  const isNew = await markUpdateProcessed(env, updateId);
-  if (!isNew) return;
-
-  if (text === "/id" || text.startsWith("/id@")) {
-    await sendMessage(env, chatId, `Ваш Telegram ID: <code>${escapeHtml(telegramUserId)}</code>`);
-    return;
-  }
-
-  if (!isAllowed(env, telegramUserId)) {
-    await sendMessage(
-      env,
-      chatId,
-      [
-        "Бот еще не разрешил доступ для этого аккаунта.",
-        `Ваш Telegram ID: <code>${escapeHtml(telegramUserId)}</code>`,
-        "Его нужно добавить в <code>ALLOWED_TELEGRAM_IDS</code> в настройках Worker."
-      ].join("\n")
-    );
-    return;
-  }
-
-  const user = await upsertUser(env, message.from);
+  const shouldProcess = await beginUpdateProcessing(env, updateId);
+  if (!shouldProcess) return;
 
   try {
+    if (text === "/id" || text.startsWith("/id@")) {
+      await sendMessage(env, chatId, `Ваш Telegram ID: <code>${escapeHtml(telegramUserId)}</code>`);
+      await completeUpdateProcessing(env, updateId);
+      return;
+    }
+
+    if (!isAllowed(env, telegramUserId)) {
+      await sendMessage(
+        env,
+        chatId,
+        [
+          "Бот еще не разрешил доступ для этого аккаунта.",
+          `Ваш Telegram ID: <code>${escapeHtml(telegramUserId)}</code>`,
+          "Его нужно добавить в <code>ALLOWED_TELEGRAM_IDS</code> в настройках Worker."
+        ].join("\n")
+      );
+      await completeUpdateProcessing(env, updateId);
+      return;
+    }
+
+    const user = await upsertUser(env, message.from);
+
     if (text.startsWith("/")) {
       await handleCommand(env, { chatId, user, text });
+      await completeUpdateProcessing(env, updateId);
       return;
     }
 
@@ -462,6 +500,7 @@ async function handleTelegramUpdate(update, env) {
         originalText: text,
         useAi: true
       });
+      await completeUpdateProcessing(env, updateId);
       return;
     }
 
@@ -471,6 +510,17 @@ async function handleTelegramUpdate(update, env) {
         chatId,
         "Я не смог уверенно понять сумму и тип операции. Пример: <code>1400 такси</code> или <code>дал сестре 5000 в долг</code>."
       );
+      await completeUpdateProcessing(env, updateId);
+      return;
+    }
+
+    if (!isSupportedCurrency(intent.currency)) {
+      await sendMessage(
+        env,
+        chatId,
+        `Сейчас я веду учет только в <b>${ONLY_SUPPORTED_CURRENCY}</b>. Запись с валютой <code>${escapeHtml(intent.currency)}</code> не добавил.`
+      );
+      await completeUpdateProcessing(env, updateId);
       return;
     }
 
@@ -484,6 +534,7 @@ async function handleTelegramUpdate(update, env) {
           "Переформулируй чуть точнее, например: <code>расход 5000 сестре</code> или <code>дал сестре 5000 в долг</code>."
         ].join("\n")
       );
+      await completeUpdateProcessing(env, updateId);
       return;
     }
 
@@ -496,8 +547,10 @@ async function handleTelegramUpdate(update, env) {
     });
 
     await sendMessage(env, chatId, formatTransactionCreated(inserted));
+    await completeUpdateProcessing(env, updateId);
   } catch (error) {
     console.error("update failed", error);
+    await failUpdateProcessing(env, updateId, error);
     await sendMessage(
       env,
       chatId,
@@ -696,7 +749,13 @@ function fallbackClassify(text) {
   if (/(дал|дала|одолжил|одолжила).*(долг|в долг)|в долг/i.test(lower)) kind = "loan_out";
   if (/(вернул|вернула|вернули).*(мне|долг)|сестра вернула|друг вернул|мама вернула/i.test(lower)) kind = "loan_repayment";
   if (/(взял|взяла).*(долг|в долг|у )/i.test(lower)) kind = "borrow_in";
-  if (/^(вернул|вернула|отдал|отдала)/i.test(lower) && /(долг|другу|сестре|маме)/i.test(lower)) kind = "borrow_repayment";
+  if (
+    /^(вернул|вернула|отдал|отдала)/i.test(lower) &&
+    /(долг|другу|сестре|маме)/i.test(lower) &&
+    !/(мне|нам)/i.test(lower)
+  ) {
+    kind = "borrow_repayment";
+  }
 
   const category = inferCategory(lower, kind);
   return {
@@ -727,7 +786,7 @@ function normalizeIntent(intent, rawText, env) {
   return {
     kind,
     amount: typeof intent.amount === "number" ? intent.amount : fallback.amount,
-    currency: normalizeCurrency(intent.currency || env.DEFAULT_CURRENCY || "KZT"),
+    currency: normalizeCurrency(intent.currency || ONLY_SUPPORTED_CURRENCY),
     category: category.category,
     subcategory: category.subcategory,
     counterparty: limitText(cleanText(intent.counterparty) || fallback.counterparty, 60),
@@ -798,6 +857,15 @@ async function insertTransaction(env, { updateId, user, chatId, intent, rawText 
   const localDate = resolveLocalDate(intent.date_text, timezone, now);
   const amountMinor = toMinor(intent.amount);
   const nowIso = now.toISOString();
+
+  const existing = await env.DB.prepare(
+    `SELECT id, kind, amount_minor, currency, category, subcategory, counterparty, description, local_date
+    FROM transactions
+    WHERE telegram_update_id = ? AND user_id = ?`
+  )
+    .bind(updateId, user.id)
+    .first();
+  if (existing) return existing;
 
   const row = await env.DB.prepare(
     `INSERT INTO transactions (
@@ -1225,7 +1293,11 @@ async function undoLast(env, chatId, user) {
     return;
   }
 
-  await softDelete(env, user.id, row.id, "undo");
+  const changed = await softDelete(env, user.id, row.id, "undo");
+  if (!changed) {
+    await sendMessage(env, chatId, "Запись уже была изменена. Открой /last и попробуй снова.");
+    return;
+  }
   await sendMessage(
     env,
     chatId,
@@ -1253,7 +1325,11 @@ async function deleteById(env, chatId, user, arg) {
     return;
   }
 
-  await softDelete(env, user.id, id, "delete");
+  const changed = await softDelete(env, user.id, id, "delete");
+  if (!changed) {
+    await sendMessage(env, chatId, `Запись <code>${id}</code> уже была изменена. Открой /last и попробуй снова.`);
+    return;
+  }
   await sendMessage(env, chatId, `Удалил запись <code>${id}</code>.`);
 }
 
@@ -1277,7 +1353,11 @@ async function restoreById(env, chatId, user, arg) {
     return;
   }
 
-  await restoreTransaction(env, user.id, id, "restore");
+  const changed = await restoreTransaction(env, user.id, id, "restore");
+  if (!changed) {
+    await sendMessage(env, chatId, `Запись <code>${id}</code> уже была изменена. Открой /last deleted и попробуй снова.`);
+    return;
+  }
 
   await sendMessage(
     env,
@@ -1288,26 +1368,30 @@ async function restoreById(env, chatId, user, arg) {
 
 async function softDelete(env, userId, transactionId, action) {
   const now = new Date().toISOString();
-  await env.DB.prepare(
+  const result = await env.DB.prepare(
     `UPDATE transactions
     SET status = 'deleted', deleted_at = ?, updated_at = ?
     WHERE user_id = ? AND id = ? AND status = 'active'`
   )
     .bind(now, now, userId, transactionId)
     .run();
+  if ((result.meta?.changes ?? 0) === 0) return false;
   await audit(env, userId, transactionId, action, { deleted_at: now });
+  return true;
 }
 
 async function restoreTransaction(env, userId, transactionId, action) {
   const now = new Date().toISOString();
-  await env.DB.prepare(
+  const result = await env.DB.prepare(
     `UPDATE transactions
     SET status = 'active', deleted_at = NULL, updated_at = ?
     WHERE user_id = ? AND id = ? AND status = 'deleted'`
   )
     .bind(now, userId, transactionId)
     .run();
+  if ((result.meta?.changes ?? 0) === 0) return false;
   await audit(env, userId, transactionId, action, { restored_at: now });
+  return true;
 }
 
 function formatBriefTransaction(row) {
@@ -1386,12 +1470,19 @@ async function upsertUser(env, from) {
   if (existing) {
     await env.DB.prepare(
       `UPDATE users
-      SET username = ?, first_name = ?, last_name = ?, updated_at = ?
+      SET username = ?, first_name = ?, last_name = ?, currency = ?, updated_at = ?
       WHERE telegram_user_id = ?`
     )
-      .bind(from.username || null, from.first_name || null, from.last_name || null, now, telegramUserId)
+      .bind(from.username || null, from.first_name || null, from.last_name || null, ONLY_SUPPORTED_CURRENCY, now, telegramUserId)
       .run();
-    return existing;
+    return {
+      ...existing,
+      username: from.username || null,
+      first_name: from.first_name || null,
+      last_name: from.last_name || null,
+      currency: ONLY_SUPPORTED_CURRENCY,
+      updated_at: now
+    };
   }
 
   const row = await env.DB.prepare(
@@ -1405,7 +1496,7 @@ async function upsertUser(env, from) {
       from.first_name || null,
       from.last_name || null,
       env.DEFAULT_TIMEZONE || "Asia/Qyzylorda",
-      env.DEFAULT_CURRENCY || "KZT",
+      ONLY_SUPPORTED_CURRENCY,
       now,
       now
     )
@@ -1415,11 +1506,58 @@ async function upsertUser(env, from) {
   return row;
 }
 
-async function markUpdateProcessed(env, updateId) {
-  const result = await env.DB.prepare("INSERT OR IGNORE INTO processed_updates (update_id, processed_at) VALUES (?, ?)")
-    .bind(updateId, new Date().toISOString())
+async function beginUpdateProcessing(env, updateId) {
+  const now = new Date().toISOString();
+  const staleBefore = new Date(Date.now() - UPDATE_PROCESSING_STALE_MS).toISOString();
+  const existing = await env.DB.prepare(
+    "SELECT update_id, status, processed_at FROM processed_updates WHERE update_id = ?"
+  )
+    .bind(updateId)
+    .first();
+
+  if (!existing) {
+    const result = await env.DB.prepare(
+      `INSERT OR IGNORE INTO processed_updates (update_id, processed_at, status, attempts)
+      VALUES (?, ?, 'processing', 1)`
+    )
+      .bind(updateId, now)
+      .run();
+    return (result.meta?.changes ?? 0) > 0;
+  }
+
+  if (existing.status === "completed") return false;
+  if (existing.status === "processing" && existing.processed_at >= staleBefore) return false;
+
+  const result = await env.DB.prepare(
+    `UPDATE processed_updates
+    SET status = 'processing', processed_at = ?, completed_at = NULL, last_error = NULL, attempts = attempts + 1
+    WHERE update_id = ? AND (status = 'failed' OR (status = 'processing' AND processed_at < ?))`
+  )
+    .bind(now, updateId, staleBefore)
     .run();
-  return (result.meta?.changes ?? 1) > 0;
+  return (result.meta?.changes ?? 0) > 0;
+}
+
+async function completeUpdateProcessing(env, updateId) {
+  const now = new Date().toISOString();
+  await env.DB.prepare(
+    `UPDATE processed_updates
+    SET status = 'completed', completed_at = ?, last_error = NULL
+    WHERE update_id = ?`
+  )
+    .bind(now, updateId)
+    .run();
+}
+
+async function failUpdateProcessing(env, updateId, error) {
+  const message = limitText(error?.message || String(error || "Unknown error"), 500);
+  await env.DB.prepare(
+    `UPDATE processed_updates
+    SET status = 'failed', last_error = ?
+    WHERE update_id = ?`
+  )
+    .bind(message, updateId)
+    .run();
 }
 
 async function audit(env, userId, transactionId, action, payload) {
@@ -1645,12 +1783,16 @@ function formatAmount(amountMinor, currency) {
 }
 
 function normalizeCurrency(currency) {
-  const value = String(currency || "KZT").trim().toUpperCase();
+  const value = String(currency || ONLY_SUPPORTED_CURRENCY).trim().toUpperCase();
   if (["₸", "ТГ", "ТЕНГЕ"].includes(value)) return "KZT";
   if (["$", "USD"].includes(value)) return "USD";
   if (["€", "EUR"].includes(value)) return "EUR";
   if (["₽", "RUB"].includes(value)) return "RUB";
-  return value || "KZT";
+  return value || ONLY_SUPPORTED_CURRENCY;
+}
+
+function isSupportedCurrency(currency) {
+  return normalizeCurrency(currency) === ONLY_SUPPORTED_CURRENCY;
 }
 
 function cleanText(value) {
@@ -1686,6 +1828,15 @@ function escapeHtml(value) {
     .replaceAll('"', "&quot;");
 }
 
+function bearerToken(value) {
+  const match = String(value || "").match(/^Bearer\s+(.+)$/i);
+  return match ? match[1].trim() : null;
+}
+
+function noStoreHeaders() {
+  return { "Cache-Control": "no-store" };
+}
+
 function splitTelegramText(text) {
   const chunks = [];
   let rest = text;
@@ -1701,7 +1852,9 @@ function json(payload, init = {}) {
   return new Response(JSON.stringify(payload, null, 2), {
     ...init,
     headers: {
+      ...SECURITY_HEADERS,
       "Content-Type": "application/json; charset=utf-8",
+      "Cache-Control": "no-store",
       ...(init.headers || {})
     }
   });
@@ -1711,6 +1864,7 @@ function html(markup, init = {}) {
   return new Response(markup, {
     ...init,
     headers: {
+      ...HTML_SECURITY_HEADERS,
       "Content-Type": "text/html; charset=utf-8",
       "Cache-Control": "no-store",
       ...(init.headers || {})
@@ -1785,3 +1939,23 @@ function timingSafeEqualHex(a, b) {
   }
   return diff === 0;
 }
+
+function timingSafeEqualString(a, b) {
+  const left = String(a || "");
+  const right = String(b || "");
+  let diff = left.length ^ right.length;
+  const length = Math.max(left.length, right.length);
+  for (let index = 0; index < length; index += 1) {
+    diff |= (left.charCodeAt(index) || 0) ^ (right.charCodeAt(index) || 0);
+  }
+  return diff === 0;
+}
+
+export const __testables = {
+  fallbackClassify,
+  normalizeIntent,
+  normalizeCurrency,
+  isSupportedCurrency,
+  bearerToken,
+  timingSafeEqualString
+};

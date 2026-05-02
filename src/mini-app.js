@@ -547,6 +547,14 @@ export function miniAppHtml() {
           <div class="list" id="largest"></div>
         </section>
 
+        <section class="panel card wide">
+          <div class="panel-head">
+            <div><h2>Семья</h2><div class="caption">Помощь семье отдельно от личных трат</div></div>
+            <span class="pill" id="familyHelpTotal">0 ₸</span>
+          </div>
+          <div class="list" id="familyHelp"></div>
+        </section>
+
       </section>
     </section>
 
@@ -737,14 +745,17 @@ export function miniAppHtml() {
       const activeDays = series.filter(function(item) { return item.expense_minor > 0; }).length;
       const quietDays = Math.max(0, periodDays - activeDays);
       const topCategory = firstKzt(summary.category_totals || []);
-      const largest = firstKzt(summary.largest_expenses || []);
+      const familyHelp = selectedKzt(summary.family_help || []);
+      const familyHelpAmount = Number(familyHelp.amount_minor || 0);
 
       document.getElementById("profile").textContent = "KZT · " + (data.user.timezone || "Asia/Qyzylorda");
       document.getElementById("periodName").textContent = summary.period.label;
       document.getElementById("heroSpend").textContent = money(expense);
-      document.getElementById("heroMeta").textContent = "Расходы · " + formatRange(summary.period.start, summary.period.end) + " · " + plural(summary.transaction_count || 0, "запись", "записи", "записей");
+      document.getElementById("heroMeta").textContent = "Личные расходы · " + formatRange(summary.period.start, summary.period.end) + " · " + plural(summary.transaction_count || 0, "запись", "записи", "записей");
       document.getElementById("netFlow").textContent = (net >= 0 ? "+" : "") + money(net);
-      document.getElementById("sideNote").textContent = loanOut > 0 ? "Дано в долг: " + money(loanOut) : "Доходы минус расходы. Долги показаны отдельно.";
+      document.getElementById("sideNote").textContent = familyHelpAmount > 0
+        ? "Помощь семье отдельно: " + money(familyHelpAmount)
+        : loanOut > 0 ? "Дано в долг: " + money(loanOut) : "Доходы минус личные расходы. Долги показаны отдельно.";
       document.getElementById("rangeLabel").textContent = formatRange(summary.period.start, summary.period.end);
       document.getElementById("metrics").innerHTML = [
         metric("Средний день", money(periodDays ? Math.round(expense / periodDays) : 0), "за выбранный период"),
@@ -757,6 +768,7 @@ export function miniAppHtml() {
       renderCategoryTotals(summary.category_totals || []);
       renderCategories(summary.categories || []);
       renderLargest(summary.largest_expenses || []);
+      renderFamilyHelp(summary.family_help || [], summary.family_help_counterparties || []);
       renderDebts(data.debts || [], "debtsFull", 50);
     }
 
@@ -767,6 +779,7 @@ export function miniAppHtml() {
     function showOverviewSkeletons() {
       document.getElementById("metrics").innerHTML = "<div class='skeleton'></div><div class='skeleton'></div><div class='skeleton'></div><div class='skeleton'></div>";
       document.getElementById("dailyChart").innerHTML = "<div class='skeleton'></div>";
+      document.getElementById("familyHelp").innerHTML = "<div class='skeleton'></div>";
     }
 
     function renderDailyChart(summary) {
@@ -774,7 +787,7 @@ export function miniAppHtml() {
       const series = buildDailySeries(summary);
       const hasValues = series.some(function(item) { return item.expense_minor > 0 || item.income_minor > 0; });
       if (!hasValues) {
-        root.innerHTML = "<div class='empty'>За этот период пока нет активных записей. Добавьте трату в боте, и график появится здесь.</div>";
+        root.innerHTML = "<div class='empty'>За этот период пока нет личных расходов или доходов. Помощь семье показана отдельно ниже.</div>";
         return;
       }
       const width = 760;
@@ -870,6 +883,26 @@ export function miniAppHtml() {
       root.innerHTML = "";
       for (const item of filtered.slice(0, 5)) {
         root.appendChild(row(item.description || item.raw_text || "Расход", formatDate(item.local_date) + " · ID " + item.id + " · " + [item.category, item.subcategory].filter(Boolean).join(" · "), money(item.amount_minor), "expense"));
+      }
+    }
+
+    function renderFamilyHelp(totals, counterparties) {
+      const total = selectedKzt(totals || []);
+      const totalMinor = Number(total.amount_minor || 0);
+      const root = document.getElementById("familyHelp");
+      document.getElementById("familyHelpTotal").textContent = money(totalMinor);
+      root.innerHTML = "";
+      if (!totalMinor) {
+        root.innerHTML = "<div class='empty'>За этот период помощи семье не было.</div>";
+        return;
+      }
+      const filtered = kztItems(counterparties);
+      if (!filtered.length) {
+        root.appendChild(row("Помощь семье", plural(total.count || 0, "запись", "записи", "записей"), money(totalMinor), "debt"));
+        return;
+      }
+      for (const item of filtered) {
+        root.appendChild(row(item.counterparty || "Без имени", plural(item.count || 0, "запись", "записи", "записей"), money(item.amount_minor), "debt"));
       }
     }
 
@@ -1113,6 +1146,7 @@ export function miniAppHtml() {
       document.getElementById("metrics").innerHTML = "<div class='error'>" + escapeHtml(message) + "</div>";
       document.getElementById("dailyChart").innerHTML = "<div class='error'>" + escapeHtml(message) + "</div>";
       document.getElementById("records").innerHTML = "<div class='error'>" + escapeHtml(message) + "</div>";
+      document.getElementById("familyHelp").innerHTML = "<div class='error'>" + escapeHtml(message) + "</div>";
       document.getElementById("debtsFull").innerHTML = "<div class='error'>" + escapeHtml(message) + "</div>";
     }
 

@@ -29,6 +29,15 @@ test("fallback parser recognizes giving money as debt", () => {
   assert.equal(intent.counterparty, "сестра");
 });
 
+test("fallback parser keeps non-debt family support in family help", () => {
+  const intent = normalizeIntent(fallbackClassify("скинул сестре 30000"), "скинул сестре 30000", {});
+
+  assert.equal(intent.kind, "expense");
+  assert.equal(intent.amount, 30000);
+  assert.equal(intent.category, "Семья");
+  assert.equal(intent.subcategory, "Помощь семье");
+});
+
 test("fallback parser does not treat returned-to-me debt as my repayment", () => {
   const intent = fallbackClassify("вернул мне долг 2000");
 

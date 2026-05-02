@@ -3,6 +3,7 @@ import { miniAppHtml as renderMiniAppHtml } from "./mini-app.js";
 const TELEGRAM_API = "https://api.telegram.org/bot";
 const ONLY_SUPPORTED_CURRENCY = "KZT";
 const UPDATE_PROCESSING_STALE_MS = 10 * 60 * 1000;
+const FAMILY_HELP_EXPENSE_SQL = "kind = 'expense' AND ((category = 'Семья' AND subcategory = 'Помощь семье') OR category = 'Помощь семье')";
 
 const SECURITY_HEADERS = {
   "X-Content-Type-Options": "nosniff",
@@ -957,8 +958,8 @@ async function buildSummary(env, userId, bounds) {
   const totals = await env.DB.prepare(
     `SELECT
       currency,
-      COUNT(*) AS transaction_count,
-      COALESCE(SUM(CASE WHEN kind = 'expense' THEN amount_minor ELSE 0 END), 0) AS expense_minor,
+      COUNT(CASE WHEN NOT (${FAMILY_HELP_EXPENSE_SQL}) THEN 1 END) AS transaction_count,
+      COALESCE(SUM(CASE WHEN kind = 'expense' AND NOT (${FAMILY_HELP_EXPENSE_SQL}) THEN amount_minor ELSE 0 END), 0) AS expense_minor,
       COALESCE(SUM(CASE WHEN kind = 'income' THEN amount_minor ELSE 0 END), 0) AS income_minor,
       COALESCE(SUM(CASE WHEN kind = 'loan_out' THEN amount_minor ELSE 0 END), 0) AS loan_out_minor,
       COALESCE(SUM(CASE WHEN kind = 'loan_repayment' THEN amount_minor ELSE 0 END), 0) AS loan_repayment_minor,
@@ -980,7 +981,7 @@ async function buildSummary(env, userId, bounds) {
       SUM(amount_minor) AS amount_minor,
       COUNT(*) AS count
     FROM transactions
-    WHERE user_id = ? AND status = 'active' AND kind = 'expense' AND local_date BETWEEN ? AND ?
+    WHERE user_id = ? AND status = 'active' AND kind = 'expense' AND NOT (${FAMILY_HELP_EXPENSE_SQL}) AND local_date BETWEEN ? AND ?
     GROUP BY currency, category, subcategory
     ORDER BY amount_minor DESC
     LIMIT 8`
@@ -995,7 +996,7 @@ async function buildSummary(env, userId, bounds) {
       SUM(amount_minor) AS amount_minor,
       COUNT(*) AS count
     FROM transactions
-    WHERE user_id = ? AND status = 'active' AND kind = 'expense' AND local_date BETWEEN ? AND ?
+    WHERE user_id = ? AND status = 'active' AND kind = 'expense' AND NOT (${FAMILY_HELP_EXPENSE_SQL}) AND local_date BETWEEN ? AND ?
     GROUP BY currency, category
     ORDER BY amount_minor DESC
     LIMIT 10`
@@ -1007,11 +1008,11 @@ async function buildSummary(env, userId, bounds) {
     `SELECT
       local_date,
       currency,
-      COALESCE(SUM(CASE WHEN kind = 'expense' THEN amount_minor ELSE 0 END), 0) AS expense_minor,
+      COALESCE(SUM(CASE WHEN kind = 'expense' AND NOT (${FAMILY_HELP_EXPENSE_SQL}) THEN amount_minor ELSE 0 END), 0) AS expense_minor,
       COALESCE(SUM(CASE WHEN kind = 'income' THEN amount_minor ELSE 0 END), 0) AS income_minor,
       COALESCE(SUM(CASE WHEN kind = 'loan_out' THEN amount_minor ELSE 0 END), 0) AS loan_out_minor,
       COALESCE(SUM(CASE WHEN kind = 'borrow_in' THEN amount_minor ELSE 0 END), 0) AS borrow_in_minor,
-      COUNT(*) AS count
+      COUNT(CASE WHEN NOT (${FAMILY_HELP_EXPENSE_SQL}) THEN 1 END) AS count
     FROM transactions
     WHERE user_id = ? AND status = 'active' AND local_date BETWEEN ? AND ?
     GROUP BY local_date, currency
@@ -1032,9 +1033,37 @@ async function buildSummary(env, userId, bounds) {
       raw_text,
       local_date
     FROM transactions
-    WHERE user_id = ? AND status = 'active' AND kind = 'expense' AND local_date BETWEEN ? AND ?
+    WHERE user_id = ? AND status = 'active' AND kind = 'expense' AND NOT (${FAMILY_HELP_EXPENSE_SQL}) AND local_date BETWEEN ? AND ?
     ORDER BY amount_minor DESC
     LIMIT 5`
+  )
+    .bind(userId, bounds.start, bounds.end)
+    .all();
+
+  const familyHelp = await env.DB.prepare(
+    `SELECT
+      currency,
+      SUM(amount_minor) AS amount_minor,
+      COUNT(*) AS count
+    FROM transactions
+    WHERE user_id = ? AND status = 'active' AND ${FAMILY_HELP_EXPENSE_SQL} AND local_date BETWEEN ? AND ?
+    GROUP BY currency
+    ORDER BY currency`
+  )
+    .bind(userId, bounds.start, bounds.end)
+    .all();
+
+  const familyHelpCounterparties = await env.DB.prepare(
+    `SELECT
+      currency,
+      COALESCE(counterparty, 'не указано') AS counterparty,
+      SUM(amount_minor) AS amount_minor,
+      COUNT(*) AS count
+    FROM transactions
+    WHERE user_id = ? AND status = 'active' AND ${FAMILY_HELP_EXPENSE_SQL} AND local_date BETWEEN ? AND ?
+    GROUP BY currency, counterparty
+    ORDER BY amount_minor DESC
+    LIMIT 8`
   )
     .bind(userId, bounds.start, bounds.end)
     .all();
@@ -1049,7 +1078,9 @@ async function buildSummary(env, userId, bounds) {
     categories: categories.results || [],
     category_totals: categoryTotals.results || [],
     by_day: byDay.results || [],
-    largest_expenses: largestExpenses.results || []
+    largest_expenses: largestExpenses.results || [],
+    family_help: familyHelp.results || [],
+    family_help_counterparties: familyHelpCounterparties.results || []
   };
 }
 
@@ -1087,9 +1118,17 @@ function formatSummary(summary, bounds) {
     }
   }
 
+  if (summary.family_help?.length) {
+    lines.push("");
+    lines.push("Помощь семье отдельно:");
+    for (const item of summary.family_help) {
+      lines.push(`- <b>${formatAmount(item.amount_minor, item.currency || "KZT")}</b> (${item.count} записей)`);
+    }
+  }
+
   if (!summary.transaction_count) {
     lines.push("");
-    lines.push("За этот период пока нет записей.");
+    lines.push("За этот период пока нет личных записей.");
   }
 
   return lines.join("\n");

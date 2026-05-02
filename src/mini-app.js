@@ -521,16 +521,16 @@ export function miniAppHtml() {
           <div class="panel-head">
             <div>
               <h2>Динамика</h2>
-              <div class="caption">Расходы и доходы по дням</div>
+              <div class="caption">Личные расходы и доходы по дням</div>
             </div>
             <div class="caption" id="rangeLabel"></div>
           </div>
           <div class="chart" id="dailyChart"></div>
-          <div class="legend"><span><i class="dot"></i>Расходы</span><span><i class="dot income"></i>Доходы</span></div>
+          <div class="legend"><span><i class="dot"></i>Личные расходы</span><span><i class="dot income"></i>Доходы</span></div>
         </section>
 
         <section class="panel card">
-          <div class="panel-head"><div><h2>Категории</h2><div class="caption">Куда ушли деньги</div></div></div>
+          <div class="panel-head"><div><h2>Категории</h2><div class="caption">Куда ушли личные деньги</div></div></div>
           <div class="category-layout">
             <div class="donut" id="donut"><div class="donut-core">Всего<strong id="donutTotal">0 ₸</strong></div></div>
             <div class="list" id="categoryTotals"></div>
@@ -538,12 +538,12 @@ export function miniAppHtml() {
         </section>
 
         <section class="panel card">
-          <div class="panel-head"><div><h2>Детализация</h2><div class="caption">Подкатегории расходов</div></div></div>
+          <div class="panel-head"><div><h2>Детализация</h2><div class="caption">Подкатегории личных расходов</div></div></div>
           <div class="list" id="categories"></div>
         </section>
 
         <section class="panel card wide">
-          <div class="panel-head"><div><h2>Крупные траты</h2><div class="caption">Самые заметные списания</div></div></div>
+          <div class="panel-head"><div><h2>Крупные траты</h2><div class="caption">Самые заметные личные списания</div></div></div>
           <div class="list" id="largest"></div>
         </section>
 
@@ -753,9 +753,16 @@ export function miniAppHtml() {
       document.getElementById("heroSpend").textContent = money(expense);
       document.getElementById("heroMeta").textContent = "Личные расходы · " + formatRange(summary.period.start, summary.period.end) + " · " + plural(summary.transaction_count || 0, "запись", "записи", "записей");
       document.getElementById("netFlow").textContent = (net >= 0 ? "+" : "") + money(net);
-      document.getElementById("sideNote").textContent = familyHelpAmount > 0
-        ? "Помощь семье отдельно: " + money(familyHelpAmount)
-        : loanOut > 0 ? "Дано в долг: " + money(loanOut) : "Доходы минус личные расходы. Долги показаны отдельно.";
+      const sideNotes = [];
+      if (familyHelpAmount > 0) {
+        sideNotes.push("Помощь семье отдельно: " + money(familyHelpAmount));
+      }
+      if (loanOut > 0) {
+        sideNotes.push("Дано в долг: " + money(loanOut));
+      }
+      document.getElementById("sideNote").textContent = sideNotes.length
+        ? sideNotes.join(". ")
+        : "Доходы минус личные расходы. Долги показаны отдельно.";
       document.getElementById("rangeLabel").textContent = formatRange(summary.period.start, summary.period.end);
       document.getElementById("metrics").innerHTML = [
         metric("Средний день", money(periodDays ? Math.round(expense / periodDays) : 0), "за выбранный период"),
@@ -779,6 +786,7 @@ export function miniAppHtml() {
     function showOverviewSkeletons() {
       document.getElementById("metrics").innerHTML = "<div class='skeleton'></div><div class='skeleton'></div><div class='skeleton'></div><div class='skeleton'></div>";
       document.getElementById("dailyChart").innerHTML = "<div class='skeleton'></div>";
+      document.getElementById("familyHelpPanel").hidden = true;
       document.getElementById("familyHelp").innerHTML = "<div class='skeleton'></div>";
     }
 
@@ -787,7 +795,10 @@ export function miniAppHtml() {
       const series = buildDailySeries(summary);
       const hasValues = series.some(function(item) { return item.expense_minor > 0 || item.income_minor > 0; });
       if (!hasValues) {
-        root.innerHTML = "<div class='empty'>За этот период пока нет личных расходов или доходов. Помощь семье показана отдельно ниже.</div>";
+        const hasFamilyHelp = kztItems(summary.family_help || []).some(function(item) { return Number(item.amount_minor || 0) > 0; });
+        root.innerHTML = hasFamilyHelp
+          ? "<div class='empty'>За этот период пока нет личных расходов или доходов. Помощь семье показана отдельно ниже.</div>"
+          : "<div class='empty'>За этот период пока нет личных расходов или доходов.</div>";
         return;
       }
       const width = 760;
@@ -819,7 +830,7 @@ export function miniAppHtml() {
         return "<line x1='" + pad.left + "' y1='" + y.toFixed(2) + "' x2='" + (width - pad.right) + "' y2='" + y.toFixed(2) + "' stroke='rgba(32,36,46,.08)' stroke-width='1'></line>";
       }).join("");
       root.innerHTML =
-        "<svg viewBox='0 0 " + width + " " + height + "' role='img' aria-label='Динамика расходов и доходов'>" +
+        "<svg viewBox='0 0 " + width + " " + height + "' role='img' aria-label='Динамика личных расходов и доходов'>" +
         "<rect x='0' y='0' width='" + width + "' height='" + height + "' rx='8' fill='rgba(255,253,250,.58)'></rect>" +
         grid +
         "<text x='18' y='38' fill='#6f7785' font-size='17' font-weight='650'>" + escapeHtml(shortMoney(max)) + "</text>" +
@@ -840,7 +851,7 @@ export function miniAppHtml() {
       totalEl.textContent = money(total);
       if (!filtered.length) {
         donut.style.background = "conic-gradient(#e4e8ef 0deg 360deg)";
-        root.innerHTML = "<div class='empty'>Категории появятся после первой траты.</div>";
+        root.innerHTML = "<div class='empty'>Категории появятся после первой личной траты.</div>";
         return;
       }
       let start = 0;
@@ -877,7 +888,7 @@ export function miniAppHtml() {
       const root = document.getElementById("largest");
       const filtered = kztItems(items);
       if (!filtered.length) {
-        root.innerHTML = "<div class='empty'>Крупных трат пока нет.</div>";
+        root.innerHTML = "<div class='empty'>Крупных личных трат пока нет.</div>";
         return;
       }
       root.innerHTML = "";

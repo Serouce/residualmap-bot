@@ -547,7 +547,7 @@ export function miniAppHtml() {
           <div class="list" id="largest"></div>
         </section>
 
-        <section class="panel card wide">
+        <section class="panel card wide" id="familyHelpPanel" hidden>
           <div class="panel-head">
             <div><h2>Семья</h2><div class="caption">Помощь семье отдельно от личных трат</div></div>
             <span class="pill" id="familyHelpTotal">0 ₸</span>
@@ -889,13 +889,15 @@ export function miniAppHtml() {
     function renderFamilyHelp(totals, counterparties) {
       const total = selectedKzt(totals || []);
       const totalMinor = Number(total.amount_minor || 0);
+      const panel = document.getElementById("familyHelpPanel");
       const root = document.getElementById("familyHelp");
       document.getElementById("familyHelpTotal").textContent = money(totalMinor);
       root.innerHTML = "";
       if (!totalMinor) {
-        root.innerHTML = "<div class='empty'>За этот период помощи семье не было.</div>";
+        panel.hidden = true;
         return;
       }
+      panel.hidden = false;
       const filtered = kztItems(counterparties);
       if (!filtered.length) {
         root.appendChild(row("Помощь семье", plural(total.count || 0, "запись", "записи", "записей"), money(totalMinor), "debt"));

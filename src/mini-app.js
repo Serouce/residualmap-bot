@@ -508,7 +508,7 @@ export function miniAppHtml() {
             <div class="side-label">Баланс периода</div>
             <div class="side-value" id="netFlow">0 ₸</div>
           </div>
-          <div class="caption" id="sideNote">Доходы минус расходы. Долги показаны отдельно.</div>
+          <div class="caption" id="sideNote">Доходы минус личные расходы. Долги показаны отдельно.</div>
         </aside>
       </section>
 
@@ -745,23 +745,13 @@ export function miniAppHtml() {
       const activeDays = series.filter(function(item) { return item.expense_minor > 0; }).length;
       const quietDays = Math.max(0, periodDays - activeDays);
       const topCategory = firstKzt(summary.category_totals || []);
-      const familyHelp = selectedKzt(summary.family_help || []);
-      const familyHelpAmount = Number(familyHelp.amount_minor || 0);
-
       document.getElementById("profile").textContent = "KZT · " + (data.user.timezone || "Asia/Qyzylorda");
       document.getElementById("periodName").textContent = summary.period.label;
       document.getElementById("heroSpend").textContent = money(expense);
       document.getElementById("heroMeta").textContent = "Личные расходы · " + formatRange(summary.period.start, summary.period.end) + " · " + plural(summary.transaction_count || 0, "запись", "записи", "записей");
       document.getElementById("netFlow").textContent = (net >= 0 ? "+" : "") + money(net);
-      const sideNotes = [];
-      if (familyHelpAmount > 0) {
-        sideNotes.push("Помощь семье отдельно: " + money(familyHelpAmount));
-      }
-      if (loanOut > 0) {
-        sideNotes.push("Дано в долг: " + money(loanOut));
-      }
-      document.getElementById("sideNote").textContent = sideNotes.length
-        ? sideNotes.join(". ")
+      document.getElementById("sideNote").textContent = loanOut > 0
+        ? "Дано в долг: " + money(loanOut)
         : "Доходы минус личные расходы. Долги показаны отдельно.";
       document.getElementById("rangeLabel").textContent = formatRange(summary.period.start, summary.period.end);
       document.getElementById("metrics").innerHTML = [
@@ -795,10 +785,7 @@ export function miniAppHtml() {
       const series = buildDailySeries(summary);
       const hasValues = series.some(function(item) { return item.expense_minor > 0 || item.income_minor > 0; });
       if (!hasValues) {
-        const hasFamilyHelp = kztItems(summary.family_help || []).some(function(item) { return Number(item.amount_minor || 0) > 0; });
-        root.innerHTML = hasFamilyHelp
-          ? "<div class='empty'>За этот период пока нет личных расходов или доходов. Помощь семье показана отдельно ниже.</div>"
-          : "<div class='empty'>За этот период пока нет личных расходов или доходов.</div>";
+        root.innerHTML = "<div class='empty'>За этот период пока нет личных расходов или доходов.</div>";
         return;
       }
       const width = 760;
@@ -904,7 +891,7 @@ export function miniAppHtml() {
       const root = document.getElementById("familyHelp");
       document.getElementById("familyHelpTotal").textContent = money(totalMinor);
       root.innerHTML = "";
-      if (!totalMinor) {
+      if (totalMinor <= 0) {
         panel.hidden = true;
         return;
       }

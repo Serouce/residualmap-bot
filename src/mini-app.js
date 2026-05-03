@@ -1119,6 +1119,395 @@ export function miniAppHtml() {
         grid-template-columns: 1fr;
       }
     }
+    /* Premium visual refresh: calm finance cockpit, stable layout, stronger hierarchy. */
+    :root {
+      --bg: var(--tg-theme-bg-color, #f3f5f7);
+      --surface: var(--tg-theme-secondary-bg-color, #ffffff);
+      --surface-raised: #ffffff;
+      --surface-soft: #eef2f5;
+      --surface-tint: #f8fafb;
+      --text: var(--tg-theme-text-color, #121722);
+      --muted: var(--tg-theme-hint-color, #5b6472);
+      --subtle: #6d7583;
+      --line: var(--tg-theme-section-separator-color, rgba(18,23,34,.12));
+      --accent: var(--tg-theme-button-color, #176f64);
+      --accent-2: #315d86;
+      --accent-text: var(--tg-theme-button-text-color, #ffffff);
+      --expense: #9f354b;
+      --income: #197057;
+      --debt: #8a611a;
+      --category-a: #315d86;
+      --category-b: #8b4f67;
+      --category-c: #9a6a2d;
+      --category-d: #43757b;
+      --shadow: 0 18px 46px rgba(15, 23, 42, .09);
+      --shadow-soft: 0 10px 26px rgba(15, 23, 42, .07);
+      --shadow-tight: 0 1px 2px rgba(15, 23, 42, .06), 0 10px 30px rgba(15, 23, 42, .06);
+    }
+    :root[data-scheme="dark"] {
+      --bg: var(--tg-theme-bg-color, #0c0f14);
+      --surface: var(--tg-theme-secondary-bg-color, #151922);
+      --surface-raised: #1b202b;
+      --surface-soft: #202633;
+      --surface-tint: #121720;
+      --text: var(--tg-theme-text-color, #f6f8fb);
+      --muted: var(--tg-theme-hint-color, #aeb7c5);
+      --subtle: #c0c7d2;
+      --line: var(--tg-theme-section-separator-color, rgba(255,255,255,.13));
+      --accent: var(--tg-theme-button-color, #64b9ad);
+      --accent-2: #9cb9e5;
+      --accent-text: var(--tg-theme-button-text-color, #061210);
+      --expense: #ef8da0;
+      --income: #83d5b2;
+      --debt: #e0b762;
+      --category-a: #9cb9e5;
+      --category-b: #d7a3b8;
+      --category-c: #e1bc83;
+      --category-d: #9bcbd1;
+      --shadow: 0 20px 52px rgba(0,0,0,.32);
+      --shadow-soft: 0 12px 30px rgba(0,0,0,.24);
+      --shadow-tight: 0 1px 2px rgba(0,0,0,.18), 0 14px 34px rgba(0,0,0,.22);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-scheme="light"]) {
+        --bg: var(--tg-theme-bg-color, #0c0f14);
+        --surface: var(--tg-theme-secondary-bg-color, #151922);
+        --surface-raised: #1b202b;
+        --surface-soft: #202633;
+        --surface-tint: #121720;
+        --text: var(--tg-theme-text-color, #f6f8fb);
+        --muted: var(--tg-theme-hint-color, #aeb7c5);
+        --subtle: #c0c7d2;
+        --line: var(--tg-theme-section-separator-color, rgba(255,255,255,.13));
+        --accent: var(--tg-theme-button-color, #64b9ad);
+        --accent-2: #9cb9e5;
+        --accent-text: var(--tg-theme-button-text-color, #061210);
+        --expense: #ef8da0;
+        --income: #83d5b2;
+        --debt: #e0b762;
+        --category-a: #9cb9e5;
+        --category-b: #d7a3b8;
+        --category-c: #e1bc83;
+        --category-d: #9bcbd1;
+        --shadow: 0 20px 52px rgba(0,0,0,.32);
+        --shadow-soft: 0 12px 30px rgba(0,0,0,.24);
+        --shadow-tight: 0 1px 2px rgba(0,0,0,.18), 0 14px 34px rgba(0,0,0,.22);
+      }
+    }
+    body {
+      background:
+        linear-gradient(180deg, color-mix(in srgb, var(--surface-soft) 68%, var(--bg)) 0%, var(--bg) 38%, color-mix(in srgb, var(--accent) 4%, var(--bg)) 100%);
+      color: var(--text);
+      font-size: 16px;
+    }
+    .app {
+      width: min(920px, 100%);
+    }
+    .top {
+      top: 0;
+      margin: 0 0 12px;
+      padding: 10px;
+      border: 1px solid color-mix(in srgb, var(--line) 84%, transparent);
+      border-radius: 8px;
+      background:
+        linear-gradient(180deg, color-mix(in srgb, var(--surface) 96%, transparent), color-mix(in srgb, var(--surface) 90%, var(--bg)));
+      box-shadow: var(--shadow-tight);
+    }
+    .brand-row {
+      margin-bottom: 10px;
+      padding: 0 2px;
+    }
+    .mark {
+      width: 42px;
+      height: 42px;
+      background:
+        linear-gradient(145deg, color-mix(in srgb, var(--accent) 86%, #ffffff), color-mix(in srgb, var(--accent-2) 78%, #000000));
+      color: var(--accent-text);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.22), 0 12px 24px color-mix(in srgb, var(--accent) 18%, transparent);
+      font-size: 18px;
+    }
+    .brand-title {
+      font-size: 21px;
+      letter-spacing: -.01em;
+    }
+    .brand-sub,
+    .sync-status {
+      color: var(--muted);
+    }
+    .sync-status {
+      font-size: 12.5px;
+    }
+    .icon-btn {
+      background:
+        linear-gradient(180deg, color-mix(in srgb, var(--surface-raised) 96%, #ffffff), color-mix(in srgb, var(--surface-soft) 72%, var(--surface)));
+      border-color: color-mix(in srgb, var(--line) 88%, transparent);
+      box-shadow: var(--shadow-soft);
+    }
+    .icon-btn:hover {
+      background: color-mix(in srgb, var(--accent) 9%, var(--surface));
+    }
+    .segments,
+    .tabs {
+      padding: 4px;
+      border: 1px solid color-mix(in srgb, var(--line) 90%, transparent);
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--surface-soft) 70%, var(--surface));
+      box-shadow: inset 0 1px 0 color-mix(in srgb, var(--surface-raised) 80%, transparent);
+    }
+    .segments {
+      margin-bottom: 8px;
+    }
+    .segments button,
+    .tabs button {
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--muted);
+      transition: background-color .16s ease, color .16s ease, border-color .16s ease, box-shadow .16s ease;
+    }
+    .segments button:hover,
+    .tabs button:hover {
+      color: var(--text);
+      background: color-mix(in srgb, var(--surface) 74%, transparent);
+    }
+    .segments button.active,
+    .tabs button.active {
+      background: var(--surface-raised);
+      color: var(--text);
+      border-color: color-mix(in srgb, var(--line) 84%, transparent);
+      box-shadow: 0 8px 22px rgba(15, 23, 42, .08);
+    }
+    .segments button.active {
+      color: var(--accent);
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent), 0 8px 22px color-mix(in srgb, var(--accent) 10%, transparent);
+    }
+    .tabs button.active {
+      background: var(--text);
+      color: var(--bg);
+      border-color: var(--text);
+    }
+    .hero {
+      grid-template-columns: minmax(0, 1.12fr) minmax(230px, .88fr);
+      gap: 12px;
+      margin: 0 0 10px;
+    }
+    .card {
+      border-color: color-mix(in srgb, var(--line) 88%, transparent);
+      background:
+        linear-gradient(180deg, color-mix(in srgb, var(--surface-raised) 98%, transparent), color-mix(in srgb, var(--surface) 94%, var(--surface-tint)));
+      box-shadow: var(--shadow-tight);
+    }
+    .hero-main,
+    .hero-side,
+    .panel {
+      padding: 18px;
+    }
+    .hero-main {
+      position: relative;
+      overflow: hidden;
+      background:
+        linear-gradient(140deg, color-mix(in srgb, var(--surface-raised) 96%, transparent), color-mix(in srgb, var(--accent) 8%, var(--surface)) 58%, color-mix(in srgb, var(--accent-2) 8%, var(--surface)));
+      border-color: color-mix(in srgb, var(--accent) 28%, var(--line));
+    }
+    .hero-main::after {
+      content: "";
+      position: absolute;
+      inset: auto 0 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--accent), var(--accent-2), var(--expense));
+      opacity: .82;
+    }
+    .hero-side {
+      background:
+        linear-gradient(150deg, color-mix(in srgb, var(--text) 96%, var(--accent)), color-mix(in srgb, var(--text) 88%, var(--accent-2)));
+      color: var(--bg);
+      box-shadow: var(--shadow);
+    }
+    .eyebrow,
+    .side-label,
+    .caption,
+    .label {
+      font-size: 14px;
+      letter-spacing: .01em;
+    }
+    h1 {
+      margin-top: 8px;
+      font-size: 44px;
+      line-height: .98;
+      letter-spacing: -.015em;
+    }
+    h2 {
+      font-size: 22px;
+      letter-spacing: -.01em;
+    }
+    .side-value {
+      font-size: 31px;
+      letter-spacing: -.01em;
+    }
+    .insight {
+      margin-top: 14px;
+      padding: 12px 13px;
+      border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
+      background: color-mix(in srgb, var(--surface-raised) 66%, var(--accent) 10%);
+      box-shadow: inset 0 1px 0 color-mix(in srgb, var(--surface-raised) 72%, transparent);
+    }
+    .grid {
+      gap: 10px;
+    }
+    .metric {
+      min-height: 96px;
+      background: var(--surface);
+      transition: background-color .16s ease, border-color .16s ease;
+    }
+    .metric:hover {
+      border-color: color-mix(in srgb, var(--accent) 22%, var(--line));
+      background: color-mix(in srgb, var(--accent) 4%, var(--surface));
+    }
+    .value {
+      font-size: 21px;
+      letter-spacing: -.01em;
+    }
+    .dashboard {
+      gap: 12px;
+    }
+    .panel-head {
+      align-items: center;
+    }
+    .chart {
+      border: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--surface-tint) 78%, var(--surface));
+      padding: 10px;
+    }
+    svg.chart-svg rect:first-child {
+      fill: transparent;
+    }
+    .legend {
+      align-items: center;
+      padding-top: 2px;
+    }
+    .dot {
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--expense) 15%, transparent);
+    }
+    .dot.income {
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--income) 15%, transparent);
+    }
+    .category-layout {
+      grid-template-columns: 176px minmax(0, 1fr);
+      gap: 18px;
+    }
+    .donut {
+      width: 168px;
+      height: 168px;
+      margin: 0 auto;
+      box-shadow:
+        inset 0 0 0 1px color-mix(in srgb, var(--line) 70%, transparent),
+        0 16px 36px rgba(15, 23, 42, .08);
+    }
+    .donut-core {
+      width: 102px;
+      height: 102px;
+      border: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+      box-shadow: inset 0 1px 0 color-mix(in srgb, var(--surface-raised) 80%, transparent);
+    }
+    .row {
+      padding: 14px 0;
+    }
+    .title {
+      font-size: 16.5px;
+      letter-spacing: -.005em;
+    }
+    .amount {
+      font-size: 16.5px;
+      letter-spacing: -.005em;
+    }
+    .progress {
+      height: 9px;
+      background: color-mix(in srgb, var(--muted) 14%, transparent);
+    }
+    .progress-fill {
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.22);
+    }
+    .pill,
+    .field,
+    .day-card,
+    .detail {
+      border-color: color-mix(in srgb, var(--line) 84%, transparent);
+    }
+    .field {
+      background: color-mix(in srgb, var(--surface-raised) 88%, var(--surface));
+    }
+    .empty,
+    .error {
+      border-style: solid;
+      background: color-mix(in srgb, var(--surface-soft) 64%, var(--surface));
+    }
+    .sheet {
+      border-radius: 8px 8px 0 0;
+    }
+    @media (max-width: 820px) {
+      .hero,
+      .dashboard,
+      .category-layout {
+        grid-template-columns: 1fr;
+      }
+      .donut {
+        width: 180px;
+        height: 180px;
+      }
+      .donut-core {
+        width: 108px;
+        height: 108px;
+      }
+    }
+    @media (max-width: 520px) {
+      .top {
+        padding: 8px;
+      }
+      .brand-row {
+        margin-bottom: 8px;
+      }
+      .brand-title {
+        font-size: 20px;
+      }
+      .brand-sub {
+        font-size: 13px;
+      }
+      .sync-status {
+        display: none;
+      }
+      .mark,
+      .icon-btn {
+        width: 40px;
+        height: 40px;
+        min-width: 40px;
+      }
+      .segments,
+      .tabs {
+        gap: 4px;
+      }
+      .segments button,
+      .tabs button {
+        min-height: 40px;
+        font-size: 14px;
+      }
+      .hero-main,
+      .hero-side,
+      .panel {
+        padding: 15px;
+      }
+      h1 {
+        font-size: 39px;
+      }
+      .side-value {
+        font-size: 27px;
+      }
+      .chart {
+        padding: 8px;
+      }
+      .row {
+        gap: 10px;
+      }
+    }
     @media (prefers-reduced-motion: reduce) {
       *,
       *::before,

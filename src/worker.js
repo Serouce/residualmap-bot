@@ -4,6 +4,21 @@ const TELEGRAM_API = "https://api.telegram.org/bot";
 const ONLY_SUPPORTED_CURRENCY = "KZT";
 const UPDATE_PROCESSING_STALE_MS = 10 * 60 * 1000;
 const FAMILY_HELP_EXPENSE_SQL = "kind = 'expense' AND ((category = 'Семья' AND subcategory = 'Помощь семье') OR category = 'Помощь семье')";
+const DEBT_KINDS = ["loan_out", "loan_repayment", "borrow_in", "borrow_repayment"];
+const DATE_MONTH_WORDS = [
+  "января",
+  "февраля",
+  "марта",
+  "апреля",
+  "мая",
+  "июня",
+  "июля",
+  "августа",
+  "сентября",
+  "октября",
+  "ноября",
+  "декабря"
+];
 
 const SECURITY_HEADERS = {
   "X-Content-Type-Options": "nosniff",
@@ -206,6 +221,10 @@ export default {
       return handleDeleteWebhook(request, env);
     }
 
+    if (request.method === "POST" && url.pathname === "/admin/health") {
+      return handleAdminHealth(request, env);
+    }
+
     if (request.method === "POST" && url.pathname === "/api/app-data") {
       return handleMiniAppData(request, env);
     }
@@ -240,7 +259,7 @@ export default {
       return new Response("Bad request", { status: 400 });
     }
 
-    ctx.waitUntil(handleTelegramUpdate(update, env));
+    await handleTelegramUpdate(update, env);
     return new Response("OK");
   }
 };
@@ -291,6 +310,43 @@ async function handleDeleteWebhook(request, env) {
   return json({ ok: response.ok && data.ok === true, telegram: data }, { status: response.ok ? 200 : 502 });
 }
 
+async function handleAdminHealth(request, env) {
+  const auth = requireSetupToken(request, env);
+  if (auth) return auth;
+
+  const dbCheck = await env.DB.prepare("SELECT 1 AS ok").first().then(
+    () => ({ ok: true }),
+    (error) => ({ ok: false, error: limitText(error?.message || String(error), 240) })
+  );
+  const failed = await env.DB.prepare(
+    `SELECT update_id, processed_at, attempts, last_error
+    FROM processed_updates
+    WHERE status = 'failed'
+    ORDER BY processed_at DESC
+    LIMIT 5`
+  )
+    .all()
+    .then((result) => result.results || [], () => []);
+
+  return json({
+    ok: dbCheck.ok,
+    service: "residualmap-bot",
+    time: new Date().toISOString(),
+    checks: {
+      d1: dbCheck,
+      telegram_bot_token: Boolean(env.TELEGRAM_BOT_TOKEN),
+      telegram_webhook_secret: Boolean(env.TELEGRAM_WEBHOOK_SECRET),
+      openai_api_key: Boolean(env.OPENAI_API_KEY),
+      allowed_telegram_ids: isAllowedConfigured(env)
+    },
+    models: {
+      parse: env.OPENAI_MODEL_PARSE || "gpt-5.4-mini",
+      analytics: env.OPENAI_MODEL_ANALYTICS || env.OPENAI_MODEL_PARSE || "gpt-5.4-mini"
+    },
+    failed_updates: failed
+  }, { status: dbCheck.ok ? 200 : 503, headers: noStoreHeaders() });
+}
+
 async function handleMiniAppData(request, env) {
   const auth = await authenticateMiniAppRequest(request, env);
   if (!auth.ok) return auth.response;
@@ -330,6 +386,7 @@ async function handleMiniAppTransactions(request, env) {
   const bounds = periodBounds(period, user.timezone);
   const status = normalizeTransactionStatus(body.status);
   const kind = normalizeTransactionKind(body.kind);
+  const kindGroup = normalizeTransactionKindGroup(body.kind_group);
   const category = limitText(cleanText(body.category), 60);
   const query = limitText(cleanText(body.query), 120);
   const limit = normalizeLimit(body.limit, 30, 50);
@@ -338,6 +395,7 @@ async function handleMiniAppTransactions(request, env) {
     bounds,
     status,
     kind,
+    kindGroup,
     category,
     query,
     limit
@@ -349,6 +407,7 @@ async function handleMiniAppTransactions(request, env) {
     bounds,
     status,
     kind,
+    kind_group: kindGroup,
     category,
     query,
     limit,
@@ -367,8 +426,8 @@ async function handleMiniAppTransactionAction(request, env) {
   if (!Number.isInteger(id) || id <= 0) {
     return json({ ok: false, error: "Valid transaction id is required" }, { status: 400 });
   }
-  if (action !== "delete" && action !== "restore") {
-    return json({ ok: false, error: "Action must be delete or restore" }, { status: 400 });
+  if (action !== "delete" && action !== "restore" && action !== "update") {
+    return json({ ok: false, error: "Action must be delete, restore, or update" }, { status: 400 });
   }
 
   const row = await getTransactionById(env, user.id, id);
@@ -376,7 +435,13 @@ async function handleMiniAppTransactionAction(request, env) {
     return json({ ok: false, error: "Transaction not found" }, { status: 404 });
   }
 
-  if (action === "delete") {
+  if (action === "update") {
+    if (row.status !== "active") {
+      return json({ ok: false, error: "Only active transactions can be edited" }, { status: 409 });
+    }
+    const updated = await updateTransactionFromMiniApp(env, user.id, row, body);
+    if (!updated.ok) return updated.response;
+  } else if (action === "delete") {
     if (row.status !== "active") {
       return json({ ok: false, error: "Transaction is already deleted" }, { status: 409 });
     }
@@ -719,8 +784,8 @@ function fallbackClassify(text) {
   const lower = text.toLowerCase();
   const amount = extractAmount(lower);
 
-  const looksLikeAnalytics = /(сколько|аналитик|потратил|траты|расходы|за день|сегодня|вчера|за неделю|недел|последние 7|7 дней|за месяц|месяц)/i.test(lower);
-  const amountLooksLikePeriod = /(последние\s+7|7\s+дней)/i.test(lower);
+  const looksLikeAnalytics = /(сколько|аналитик|траты|расходы|за день|сегодня|вчера|за неделю|недел|последние\s+\d+|\d+\s+дн|за месяц|месяц)/i.test(lower);
+  const amountLooksLikePeriod = /((последние|за)\s+\d+\s+(день|дня|дней|недел|месяц|месяца|месяцев)|\d+\s+дн\.?)/i.test(lower);
   if (looksLikeAnalytics && (!amount || amountLooksLikePeriod)) {
     let period = "month";
     if (lower.includes("сегодня") || lower.includes("за день")) period = "today";
@@ -762,7 +827,7 @@ function fallbackClassify(text) {
   return {
     kind,
     amount,
-    currency: null,
+    currency: inferCurrency(lower),
     category: category.category,
     subcategory: category.subcategory,
     counterparty: inferCounterparty(lower),
@@ -787,7 +852,7 @@ function normalizeIntent(intent, rawText, env) {
   return {
     kind,
     amount: typeof intent.amount === "number" ? intent.amount : fallback.amount,
-    currency: normalizeCurrency(intent.currency || ONLY_SUPPORTED_CURRENCY),
+    currency: normalizeCurrency(intent.currency || fallback.currency || ONLY_SUPPORTED_CURRENCY),
     category: category.category,
     subcategory: category.subcategory,
     counterparty: limitText(cleanText(intent.counterparty) || fallback.counterparty, 60),
@@ -852,6 +917,15 @@ function inferCounterparty(lower) {
   return null;
 }
 
+function inferCurrency(lower) {
+  const text = String(lower || "").toLowerCase();
+  if (/(^|[\s\d])(\$|usd|доллар|долларов)(?=$|\s)/i.test(text)) return "USD";
+  if (/(^|[\s\d])(€|eur|евро)(?=$|\s)/i.test(text)) return "EUR";
+  if (/(^|[\s\d])(₽|rub|руб|рубль|рублей)(?=$|\s)/i.test(text)) return "RUB";
+  if (/(^|[\s\d])(₸|kzt|тг|тенге)(?=$|\s|[а-яё])/i.test(text)) return "KZT";
+  return null;
+}
+
 async function insertTransaction(env, { updateId, user, chatId, intent, rawText }) {
   const now = new Date();
   const timezone = user.timezone || env.DEFAULT_TIMEZONE || "Asia/Qyzylorda";
@@ -868,12 +942,24 @@ async function insertTransaction(env, { updateId, user, chatId, intent, rawText 
     .first();
   if (existing) return existing;
 
+  const searchText = buildTransactionSearchText({
+    kind: intent.kind,
+    amount_minor: amountMinor,
+    currency: intent.currency || user.currency,
+    category: intent.category,
+    subcategory: intent.subcategory,
+    counterparty: intent.counterparty,
+    description: intent.description,
+    raw_text: rawText,
+    local_date: localDate
+  });
+
   const row = await env.DB.prepare(
     `INSERT INTO transactions (
       telegram_update_id, user_id, chat_id, kind, amount_minor, currency,
       category, subcategory, counterparty, description, raw_text,
-      occurred_at, local_date, metadata_json, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      occurred_at, local_date, metadata_json, search_text, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     RETURNING id, kind, amount_minor, currency, category, subcategory, counterparty, description, local_date`
   )
     .bind(
@@ -891,6 +977,7 @@ async function insertTransaction(env, { updateId, user, chatId, intent, rawText 
       nowIso,
       localDate,
       JSON.stringify({ confidence: intent.confidence, date_text: intent.date_text }),
+      searchText,
       nowIso,
       nowIso
     )
@@ -955,118 +1042,108 @@ async function handleAnalytics(env, { chatId, user, period, originalText, useAi 
 }
 
 async function buildSummary(env, userId, bounds) {
-  const totals = await env.DB.prepare(
-    `SELECT
-      currency,
-      COUNT(CASE WHEN NOT (${FAMILY_HELP_EXPENSE_SQL}) THEN 1 END) AS transaction_count,
-      COALESCE(SUM(CASE WHEN kind = 'expense' AND NOT (${FAMILY_HELP_EXPENSE_SQL}) THEN amount_minor ELSE 0 END), 0) AS expense_minor,
-      COALESCE(SUM(CASE WHEN kind = 'income' THEN amount_minor ELSE 0 END), 0) AS income_minor,
-      COALESCE(SUM(CASE WHEN kind = 'loan_out' THEN amount_minor ELSE 0 END), 0) AS loan_out_minor,
-      COALESCE(SUM(CASE WHEN kind = 'loan_repayment' THEN amount_minor ELSE 0 END), 0) AS loan_repayment_minor,
-      COALESCE(SUM(CASE WHEN kind = 'borrow_in' THEN amount_minor ELSE 0 END), 0) AS borrow_in_minor,
-      COALESCE(SUM(CASE WHEN kind = 'borrow_repayment' THEN amount_minor ELSE 0 END), 0) AS borrow_repayment_minor
-    FROM transactions
-    WHERE user_id = ? AND status = 'active' AND local_date BETWEEN ? AND ?
-    GROUP BY currency
-    ORDER BY currency`
-  )
-    .bind(userId, bounds.start, bounds.end)
-    .all();
-
-  const categories = await env.DB.prepare(
-    `SELECT
-      currency,
-      COALESCE(category, 'Прочее') AS category,
-      COALESCE(subcategory, 'Без категории') AS subcategory,
-      SUM(amount_minor) AS amount_minor,
-      COUNT(*) AS count
-    FROM transactions
-    WHERE user_id = ? AND status = 'active' AND kind = 'expense' AND NOT (${FAMILY_HELP_EXPENSE_SQL}) AND local_date BETWEEN ? AND ?
-    GROUP BY currency, category, subcategory
-    ORDER BY amount_minor DESC
-    LIMIT 8`
-  )
-    .bind(userId, bounds.start, bounds.end)
-    .all();
-
-  const categoryTotals = await env.DB.prepare(
-    `SELECT
-      currency,
-      COALESCE(category, 'Прочее') AS category,
-      SUM(amount_minor) AS amount_minor,
-      COUNT(*) AS count
-    FROM transactions
-    WHERE user_id = ? AND status = 'active' AND kind = 'expense' AND NOT (${FAMILY_HELP_EXPENSE_SQL}) AND local_date BETWEEN ? AND ?
-    GROUP BY currency, category
-    ORDER BY amount_minor DESC
-    LIMIT 10`
-  )
-    .bind(userId, bounds.start, bounds.end)
-    .all();
-
-  const byDay = await env.DB.prepare(
-    `SELECT
-      local_date,
-      currency,
-      COALESCE(SUM(CASE WHEN kind = 'expense' AND NOT (${FAMILY_HELP_EXPENSE_SQL}) THEN amount_minor ELSE 0 END), 0) AS expense_minor,
-      COALESCE(SUM(CASE WHEN kind = 'income' THEN amount_minor ELSE 0 END), 0) AS income_minor,
-      COALESCE(SUM(CASE WHEN kind = 'loan_out' THEN amount_minor ELSE 0 END), 0) AS loan_out_minor,
-      COALESCE(SUM(CASE WHEN kind = 'borrow_in' THEN amount_minor ELSE 0 END), 0) AS borrow_in_minor,
-      COUNT(CASE WHEN NOT (${FAMILY_HELP_EXPENSE_SQL}) THEN 1 END) AS count
-    FROM transactions
-    WHERE user_id = ? AND status = 'active' AND local_date BETWEEN ? AND ?
-    GROUP BY local_date, currency
-    ORDER BY local_date, currency`
-  )
-    .bind(userId, bounds.start, bounds.end)
-    .all();
-
-  const largestExpenses = await env.DB.prepare(
-    `SELECT
-      id,
-      amount_minor,
-      currency,
-      category,
-      subcategory,
-      counterparty,
-      description,
-      raw_text,
-      local_date
-    FROM transactions
-    WHERE user_id = ? AND status = 'active' AND kind = 'expense' AND NOT (${FAMILY_HELP_EXPENSE_SQL}) AND local_date BETWEEN ? AND ?
-    ORDER BY amount_minor DESC
-    LIMIT 5`
-  )
-    .bind(userId, bounds.start, bounds.end)
-    .all();
-
-  const familyHelp = await env.DB.prepare(
-    `SELECT
-      currency,
-      SUM(amount_minor) AS amount_minor,
-      COUNT(*) AS count
-    FROM transactions
-    WHERE user_id = ? AND status = 'active' AND ${FAMILY_HELP_EXPENSE_SQL} AND local_date BETWEEN ? AND ?
-    GROUP BY currency
-    ORDER BY currency`
-  )
-    .bind(userId, bounds.start, bounds.end)
-    .all();
-
-  const familyHelpCounterparties = await env.DB.prepare(
-    `SELECT
-      currency,
-      COALESCE(counterparty, 'не указано') AS counterparty,
-      SUM(amount_minor) AS amount_minor,
-      COUNT(*) AS count
-    FROM transactions
-    WHERE user_id = ? AND status = 'active' AND ${FAMILY_HELP_EXPENSE_SQL} AND local_date BETWEEN ? AND ?
-    GROUP BY currency, counterparty
-    ORDER BY amount_minor DESC
-    LIMIT 8`
-  )
-    .bind(userId, bounds.start, bounds.end)
-    .all();
+  const [
+    totals,
+    categories,
+    categoryTotals,
+    byDay,
+    largestExpenses,
+    familyHelp,
+    familyHelpCounterparties
+  ] = await env.DB.batch([
+    env.DB.prepare(
+      `SELECT
+        currency,
+        COUNT(CASE WHEN NOT (${FAMILY_HELP_EXPENSE_SQL}) THEN 1 END) AS transaction_count,
+        COALESCE(SUM(CASE WHEN kind = 'expense' AND NOT (${FAMILY_HELP_EXPENSE_SQL}) THEN amount_minor ELSE 0 END), 0) AS expense_minor,
+        COALESCE(SUM(CASE WHEN kind = 'income' THEN amount_minor ELSE 0 END), 0) AS income_minor,
+        COALESCE(SUM(CASE WHEN kind = 'loan_out' THEN amount_minor ELSE 0 END), 0) AS loan_out_minor,
+        COALESCE(SUM(CASE WHEN kind = 'loan_repayment' THEN amount_minor ELSE 0 END), 0) AS loan_repayment_minor,
+        COALESCE(SUM(CASE WHEN kind = 'borrow_in' THEN amount_minor ELSE 0 END), 0) AS borrow_in_minor,
+        COALESCE(SUM(CASE WHEN kind = 'borrow_repayment' THEN amount_minor ELSE 0 END), 0) AS borrow_repayment_minor
+      FROM transactions
+      WHERE user_id = ? AND status = 'active' AND local_date BETWEEN ? AND ?
+      GROUP BY currency
+      ORDER BY currency`
+    ).bind(userId, bounds.start, bounds.end),
+    env.DB.prepare(
+      `SELECT
+        currency,
+        COALESCE(category, 'Прочее') AS category,
+        COALESCE(subcategory, 'Без категории') AS subcategory,
+        SUM(amount_minor) AS amount_minor,
+        COUNT(*) AS count
+      FROM transactions
+      WHERE user_id = ? AND status = 'active' AND kind = 'expense' AND NOT (${FAMILY_HELP_EXPENSE_SQL}) AND local_date BETWEEN ? AND ?
+      GROUP BY currency, category, subcategory
+      ORDER BY amount_minor DESC
+      LIMIT 8`
+    ).bind(userId, bounds.start, bounds.end),
+    env.DB.prepare(
+      `SELECT
+        currency,
+        COALESCE(category, 'Прочее') AS category,
+        SUM(amount_minor) AS amount_minor,
+        COUNT(*) AS count
+      FROM transactions
+      WHERE user_id = ? AND status = 'active' AND kind = 'expense' AND NOT (${FAMILY_HELP_EXPENSE_SQL}) AND local_date BETWEEN ? AND ?
+      GROUP BY currency, category
+      ORDER BY amount_minor DESC
+      LIMIT 10`
+    ).bind(userId, bounds.start, bounds.end),
+    env.DB.prepare(
+      `SELECT
+        local_date,
+        currency,
+        COALESCE(SUM(CASE WHEN kind = 'expense' AND NOT (${FAMILY_HELP_EXPENSE_SQL}) THEN amount_minor ELSE 0 END), 0) AS expense_minor,
+        COALESCE(SUM(CASE WHEN kind = 'income' THEN amount_minor ELSE 0 END), 0) AS income_minor,
+        COALESCE(SUM(CASE WHEN kind = 'loan_out' THEN amount_minor ELSE 0 END), 0) AS loan_out_minor,
+        COALESCE(SUM(CASE WHEN kind = 'borrow_in' THEN amount_minor ELSE 0 END), 0) AS borrow_in_minor,
+        COUNT(CASE WHEN NOT (${FAMILY_HELP_EXPENSE_SQL}) THEN 1 END) AS count
+      FROM transactions
+      WHERE user_id = ? AND status = 'active' AND local_date BETWEEN ? AND ?
+      GROUP BY local_date, currency
+      ORDER BY local_date, currency`
+    ).bind(userId, bounds.start, bounds.end),
+    env.DB.prepare(
+      `SELECT
+        id,
+        amount_minor,
+        currency,
+        category,
+        subcategory,
+        counterparty,
+        description,
+        raw_text,
+        local_date
+      FROM transactions
+      WHERE user_id = ? AND status = 'active' AND kind = 'expense' AND NOT (${FAMILY_HELP_EXPENSE_SQL}) AND local_date BETWEEN ? AND ?
+      ORDER BY amount_minor DESC
+      LIMIT 5`
+    ).bind(userId, bounds.start, bounds.end),
+    env.DB.prepare(
+      `SELECT
+        currency,
+        SUM(amount_minor) AS amount_minor,
+        COUNT(*) AS count
+      FROM transactions
+      WHERE user_id = ? AND status = 'active' AND ${FAMILY_HELP_EXPENSE_SQL} AND local_date BETWEEN ? AND ?
+      GROUP BY currency
+      ORDER BY currency`
+    ).bind(userId, bounds.start, bounds.end),
+    env.DB.prepare(
+      `SELECT
+        currency,
+        COALESCE(counterparty, 'не указано') AS counterparty,
+        SUM(amount_minor) AS amount_minor,
+        COUNT(*) AS count
+      FROM transactions
+      WHERE user_id = ? AND status = 'active' AND ${FAMILY_HELP_EXPENSE_SQL} AND local_date BETWEEN ? AND ?
+      GROUP BY currency, counterparty
+      ORDER BY amount_minor DESC
+      LIMIT 8`
+    ).bind(userId, bounds.start, bounds.end)
+  ]);
 
   const totalsByCurrency = totals.results || [];
   const transactionCount = totalsByCurrency.reduce((sum, row) => sum + Number(row.transaction_count || 0), 0);
@@ -1226,7 +1303,7 @@ async function listTransactions(env, userId, status, limit) {
   return rows.results || [];
 }
 
-async function searchTransactions(env, { userId, bounds, status, kind, category, query, limit }) {
+async function searchTransactions(env, { userId, bounds, status, kind, kindGroup, category, query, limit }) {
   const safeLimit = normalizeLimit(limit, 30, 50);
   const conditions = ["user_id = ?", "status = ?", "currency = 'KZT'", "local_date BETWEEN ? AND ?"];
   const binds = [userId, status, bounds.start, bounds.end];
@@ -1234,21 +1311,26 @@ async function searchTransactions(env, { userId, bounds, status, kind, category,
   if (kind) {
     conditions.push("kind = ?");
     binds.push(kind);
+  } else if (kindGroup === "debt") {
+    conditions.push(`kind IN (${DEBT_KINDS.map(() => "?").join(", ")})`);
+    binds.push(...DEBT_KINDS);
   }
   if (category) {
     conditions.push("category = ?");
     binds.push(category);
   }
   if (query) {
+    const pattern = `%${escapeSqlLike(query)}%`;
+    const normalizedPattern = `%${escapeSqlLike(normalizeSearchText(query))}%`;
     conditions.push(`(
+      search_text LIKE ? ESCAPE '\\' OR
       description LIKE ? ESCAPE '\\' OR
       raw_text LIKE ? ESCAPE '\\' OR
       category LIKE ? ESCAPE '\\' OR
       subcategory LIKE ? ESCAPE '\\' OR
       counterparty LIKE ? ESCAPE '\\'
     )`);
-    const pattern = `%${escapeSqlLike(query)}%`;
-    binds.push(pattern, pattern, pattern, pattern, pattern);
+    binds.push(normalizedPattern, pattern, pattern, pattern, pattern, pattern);
   }
 
   const items = await env.DB.prepare(
@@ -1284,6 +1366,103 @@ async function getTransactionById(env, userId, id) {
   )
     .bind(userId, id)
     .first();
+}
+
+async function updateTransactionFromMiniApp(env, userId, row, body) {
+  const amount = Number(body.amount);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return {
+      ok: false,
+      response: json({ ok: false, error: "Amount must be a positive number" }, { status: 400 })
+    };
+  }
+
+  const localDate = normalizeLocalDate(body.local_date);
+  if (!localDate) {
+    return {
+      ok: false,
+      response: json({ ok: false, error: "Date must be YYYY-MM-DD" }, { status: 400 })
+    };
+  }
+
+  const kind = normalizeTransactionKind(body.kind) || row.kind;
+  const rawText = limitText(cleanText(body.raw_text) || row.raw_text, 600) || row.raw_text;
+  const description = limitText(cleanText(body.description) || rawText, 180);
+  const categoryInput = limitText(cleanText(body.category), 40);
+  const subcategoryInput = limitText(cleanText(body.subcategory), 40);
+  const category = normalizeCategory({
+    rawText,
+    kind,
+    category: categoryInput,
+    subcategory: subcategoryInput
+  });
+  const counterparty = limitText(cleanText(body.counterparty), 60);
+  const amountMinor = toMinor(amount);
+  const now = new Date().toISOString();
+  const searchText = buildTransactionSearchText({
+    kind,
+    amount_minor: amountMinor,
+    currency: row.currency || ONLY_SUPPORTED_CURRENCY,
+    category: category.category,
+    subcategory: category.subcategory,
+    counterparty,
+    description,
+    raw_text: rawText,
+    local_date: localDate
+  });
+
+  const result = await env.DB.prepare(
+    `UPDATE transactions
+    SET kind = ?, amount_minor = ?, category = ?, subcategory = ?, counterparty = ?,
+      description = ?, raw_text = ?, local_date = ?, search_text = ?, updated_at = ?
+    WHERE user_id = ? AND id = ? AND status = 'active'`
+  )
+    .bind(
+      kind,
+      amountMinor,
+      category.category,
+      category.subcategory,
+      counterparty,
+      description,
+      rawText,
+      localDate,
+      searchText,
+      now,
+      userId,
+      row.id
+    )
+    .run();
+
+  if ((result.meta?.changes ?? 0) === 0) {
+    return {
+      ok: false,
+      response: json({ ok: false, error: "Transaction was already changed" }, { status: 409 })
+    };
+  }
+
+  await audit(env, userId, row.id, "mini_app_update", {
+    before: {
+      kind: row.kind,
+      amount_minor: row.amount_minor,
+      category: row.category,
+      subcategory: row.subcategory,
+      counterparty: row.counterparty,
+      description: row.description,
+      raw_text: row.raw_text,
+      local_date: row.local_date
+    },
+    after: {
+      kind,
+      amount_minor: amountMinor,
+      category: category.category,
+      subcategory: category.subcategory,
+      counterparty,
+      description,
+      raw_text: rawText,
+      local_date: localDate
+    }
+  });
+  return { ok: true };
 }
 
 async function handleLast(env, chatId, user, arg) {
@@ -1698,6 +1877,13 @@ function isAllowed(env, telegramUserId) {
   return ids.includes(telegramUserId);
 }
 
+function isAllowedConfigured(env) {
+  return String(env.ALLOWED_TELEGRAM_IDS || "")
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean).length > 0;
+}
+
 function normalizeTransactionStatus(status) {
   return status === "deleted" ? "deleted" : "active";
 }
@@ -1706,6 +1892,12 @@ function normalizeTransactionKind(kind) {
   const value = String(kind || "").trim();
   if (!value || value === "all") return null;
   return TRANSACTION_KINDS.has(value) ? value : null;
+}
+
+function normalizeTransactionKindGroup(kindGroup) {
+  const value = String(kindGroup || "").trim();
+  if (!value || value === "all") return null;
+  return value === "debt" ? "debt" : null;
 }
 
 function normalizeLimit(limit, defaultValue, maxValue) {
@@ -1718,6 +1910,13 @@ function normalizePeriod(period) {
   const value = String(period || "month");
   if (["today", "yesterday", "week", "month", "last_7_days", "last_30_days"].includes(value)) return value;
   return "month";
+}
+
+function normalizeLocalDate(value) {
+  const text = String(value || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return null;
+  const date = new Date(`${text}T00:00:00Z`);
+  return Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== text ? null : text;
 }
 
 function periodBounds(period, timezone) {
@@ -1796,12 +1995,33 @@ function startOfWeekYmd(ymd) {
 }
 
 function extractAmount(text) {
-  const match = text.match(/(?:^|\s)(\d{1,3}(?:[\s.,]\d{3})+|\d+)(?:[,.](\d{1,2}))?(?:\s|$)/);
-  if (!match) return null;
-  const normalized = match[1].replace(/[\s.]/g, "").replace(",", ".");
-  const decimal = match[2] ? `.${match[2]}` : "";
-  const value = Number(`${normalized}${decimal}`);
-  return Number.isFinite(value) ? value : null;
+  const source = String(text || "").toLowerCase();
+  const matches = [...source.matchAll(/(?:^|[^\p{L}\p{N}])(\d{1,3}(?:[\s.]\d{3})+|\d+)(?:[,.](\d{1,2}))?(?=\s*(?:₸|тг|тенге|kzt|usd|eur|rub|руб|₽|\$|€)?(?:$|[^\p{L}\p{N}]|[a-zа-яё]))/giu)];
+  const candidates = [];
+  for (const match of matches) {
+    const numberStart = match.index + match[0].search(/\d/);
+    const numberEnd = numberStart + match[1].length + (match[2] ? match[0].slice(match[0].search(/\d/) + match[1].length).indexOf(match[2]) + match[2].length : 0);
+    const before = source.slice(Math.max(0, numberStart - 18), numberStart);
+    const after = source.slice(numberEnd, numberEnd + 24);
+    if (isDateOrPeriodNumber(before, after)) continue;
+    const normalized = match[1].replace(/[\s.]/g, "");
+    const decimal = match[2] ? `.${match[2]}` : "";
+    const value = Number(`${normalized}${decimal}`);
+    if (Number.isFinite(value) && value > 0) candidates.push(value);
+  }
+  return candidates.length ? candidates[candidates.length - 1] : null;
+}
+
+function isDateOrPeriodNumber(before, after) {
+  const tail = String(after || "").trimStart();
+  const head = String(before || "");
+  const nextWord = tail.match(/^[а-яёa-z.]+/i)?.[0] || "";
+  if (DATE_MONTH_WORDS.includes(nextWord)) return true;
+  if (/^(день|дня|дней|дн\.?|неделя|недели|недель|месяц|месяца|месяцев)$/i.test(nextWord)) {
+    return /(за|последние|последних)\s*$/i.test(head) || true;
+  }
+  if (/\b(за|с|от)\s*$/i.test(head) && DATE_MONTH_WORDS.includes(nextWord)) return true;
+  return false;
 }
 
 function toMinor(amount) {
@@ -1849,6 +2069,32 @@ function limitText(value, maxLength) {
 
 function escapeSqlLike(value) {
   return String(value || "").replace(/[\\%_]/g, (char) => `\\${char}`);
+}
+
+function buildTransactionSearchText(row) {
+  return normalizeSearchText([
+    row.id,
+    row.local_date,
+    row.kind,
+    KIND_LABELS[row.kind],
+    row.amount_minor ? minorToNumber(row.amount_minor) : null,
+    row.currency,
+    row.category,
+    row.subcategory,
+    row.counterparty,
+    row.description,
+    row.raw_text
+  ].filter((value) => value !== null && value !== undefined).join(" "));
+}
+
+function normalizeSearchText(value) {
+  return String(value || "")
+    .normalize("NFKC")
+    .toLocaleLowerCase("ru-RU")
+    .replaceAll("ё", "е")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim()
+    .replace(/\s+/g, " ");
 }
 
 function csvCell(value) {
@@ -1991,7 +2237,9 @@ function timingSafeEqualString(a, b) {
 }
 
 export const __testables = {
+  extractAmount,
   fallbackClassify,
+  normalizeSearchText,
   normalizeIntent,
   normalizeCurrency,
   isSupportedCurrency,

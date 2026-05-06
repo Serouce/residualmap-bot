@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { __testables } from "../src/worker.js";
 
-const { fallbackClassify, isSupportedCurrency, normalizeCurrency, normalizeIntent } = __testables;
+const { extractAmount, fallbackClassify, isSupportedCurrency, normalizeCurrency, normalizeIntent, normalizeSearchText } = __testables;
 
 test("fallback parser recognizes a simple taxi expense", () => {
   const intent = fallbackClassify("1400 такси");
@@ -12,6 +12,31 @@ test("fallback parser recognizes a simple taxi expense", () => {
   assert.equal(intent.amount, 1400);
   assert.equal(intent.category, "Транспорт");
   assert.equal(intent.subcategory, "Такси");
+});
+
+test("fallback parser recognizes amounts attached to KZT markers", () => {
+  const intent = fallbackClassify("1500тг такси");
+
+  assert.equal(intent.kind, "expense");
+  assert.equal(intent.amount, 1500);
+  assert.equal(intent.currency, "KZT");
+  assert.equal(intent.category, "Транспорт");
+});
+
+test("fallback parser ignores calendar numbers before the amount", () => {
+  const intent = fallbackClassify("такси 1 мая 1500");
+
+  assert.equal(intent.kind, "expense");
+  assert.equal(intent.amount, 1500);
+  assert.equal(intent.date_text, null);
+});
+
+test("fallback parser treats period numbers as analytics, not expenses", () => {
+  const intent = fallbackClassify("сколько потратил за 30 дней");
+
+  assert.equal(intent.kind, "analytics");
+  assert.equal(intent.amount, null);
+  assert.equal(intent.period, "last_30_days");
 });
 
 test("fallback parser recognizes income", () => {
@@ -82,4 +107,13 @@ test("currency policy is explicit KZT-only", () => {
   );
   assert.equal(intent.currency, "USD");
   assert.equal(isSupportedCurrency(intent.currency), false);
+});
+
+test("amount extraction supports common spacing and rejects period-only numbers", () => {
+  assert.equal(extractAmount("такси 1 500 тг"), 1500);
+  assert.equal(extractAmount("сколько за 30 дней"), null);
+});
+
+test("search text normalization handles russian case and yo", () => {
+  assert.equal(normalizeSearchText("Ёлка, ЕДА и Такси!"), "елка еда и такси");
 });

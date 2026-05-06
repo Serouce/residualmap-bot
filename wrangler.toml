@@ -4,12 +4,15 @@ compatibility_date = "2026-04-30"
 workers_dev = true
 
 [vars]
-ALLOWED_TELEGRAM_IDS = "replace_with_your_telegram_user_id"
 DEFAULT_CURRENCY = "KZT"
 DEFAULT_TIMEZONE = "Asia/Qyzylorda"
-OPENAI_MODEL_PARSE = "gpt-5.4"
-OPENAI_MODEL_ANALYTICS = "gpt-5.4"
+OPENAI_MODEL_PARSE = "gpt-5.4-mini"
+OPENAI_MODEL_ANALYTICS = "gpt-5.4-mini"
 MINI_APP_URL = "https://your-worker.example/app"
+
+[observability]
+enabled = true
+head_sampling_rate = 1
 
 [[d1_databases]]
 binding = "DB"

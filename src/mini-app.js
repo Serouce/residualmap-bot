@@ -896,9 +896,29 @@ export function miniAppHtml() {
       background: var(--accent);
     }
     .controls {
-      grid-template-columns: minmax(0, 1.2fr) repeat(3, minmax(130px, .6fr));
+      grid-template-columns: minmax(0, 1.4fr) repeat(2, minmax(130px, .6fr));
       gap: 9px;
       margin: 11px 0 14px;
+    }
+    .quick-filters {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 7px;
+      margin: 8px 0 10px;
+    }
+    .quick-filters button {
+      min-height: 38px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: var(--surface);
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 760;
+    }
+    .quick-filters button.active {
+      border-color: color-mix(in srgb, var(--accent) 34%, var(--line));
+      background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+      color: var(--text);
     }
     .field-wrap {
       display: grid;
@@ -1031,13 +1051,39 @@ export function miniAppHtml() {
     .detail {
       background: var(--surface-soft);
     }
+    .edit-form {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .edit-field {
+      display: grid;
+      gap: 5px;
+      min-width: 0;
+    }
+    .edit-field.full {
+      grid-column: span 2;
+    }
+    textarea.field {
+      min-height: 82px;
+      resize: vertical;
+    }
     .actions {
       background: var(--surface);
     }
+    .actions.editing {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
     .primary,
+    .secondary,
     .danger {
       min-height: 46px;
       border-radius: 8px;
+    }
+    .secondary {
+      background: var(--surface-soft);
+      color: var(--text);
     }
     .primary {
       background: var(--accent);
@@ -1106,6 +1152,19 @@ export function miniAppHtml() {
       .controls {
         grid-template-columns: 1fr;
       }
+      #view-overview.active {
+        display: flex;
+        flex-direction: column;
+      }
+      .hero {
+        order: 1;
+      }
+      .dashboard {
+        order: 2;
+      }
+      .grid {
+        order: 3;
+      }
       .search-wrap {
         grid-column: span 1;
       }
@@ -1117,6 +1176,12 @@ export function miniAppHtml() {
       }
       .actions {
         grid-template-columns: 1fr;
+      }
+      .actions.editing {
+        grid-template-columns: 1fr;
+      }
+      .quick-filters {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
       }
     }
     /* Premium visual refresh: calm finance cockpit, stable layout, stronger hierarchy. */
@@ -1507,6 +1572,12 @@ export function miniAppHtml() {
       .row {
         gap: 10px;
       }
+      .edit-form {
+        grid-template-columns: 1fr;
+      }
+      .edit-field.full {
+        grid-column: span 1;
+      }
     }
     @media (prefers-reduced-motion: reduce) {
       *,
@@ -1543,10 +1614,10 @@ export function miniAppHtml() {
         <button data-period="last_30_days" aria-pressed="false">30 дн.</button>
         <button data-period="month" class="active" aria-pressed="true">Месяц</button>
       </nav>
-      <nav class="tabs compact" id="tabs" role="tablist" aria-label="Разделы панели">
+      <nav class="tabs" id="tabs" role="tablist" aria-label="Разделы панели">
         <button data-tab="overview" class="active" role="tab" aria-selected="true" aria-controls="view-overview">Обзор</button>
         <button data-tab="records" role="tab" aria-selected="false" aria-controls="view-records">Записи</button>
-        <button data-tab="debts" role="tab" aria-selected="false" aria-controls="view-debts" hidden>Долги</button>
+        <button data-tab="debts" role="tab" aria-selected="false" aria-controls="view-debts">Долги</button>
       </nav>
     </section>
 
@@ -1619,6 +1690,12 @@ export function miniAppHtml() {
           <div><h2>Записи</h2><div class="caption">Поиск, проверка и безопасные действия</div></div>
           <span class="pill" id="recordCount">0</span>
         </div>
+        <div class="quick-filters" id="kindQuick" aria-label="Быстрый фильтр типа">
+          <button data-kind-preset="all" class="active" aria-pressed="true">Все</button>
+          <button data-kind-preset="expense" aria-pressed="false">Расходы</button>
+          <button data-kind-preset="income" aria-pressed="false">Доходы</button>
+          <button data-kind-preset="debt" aria-pressed="false">Долги</button>
+        </div>
         <div class="controls">
           <label class="field-wrap search-wrap">
             <span class="field-label">Поиск</span>
@@ -1630,19 +1707,6 @@ export function miniAppHtml() {
             <select class="field" id="statusFilter">
               <option value="active">Активные</option>
               <option value="deleted">Удалённые</option>
-            </select>
-          </label>
-          <label class="field-wrap">
-            <span class="field-label">Тип</span>
-            <select class="field" id="kindFilter">
-              <option value="all">Все типы</option>
-              <option value="expense">Расходы</option>
-              <option value="income">Доходы</option>
-              <option value="loan_out">Дал в долг</option>
-              <option value="loan_repayment">Вернули долг</option>
-              <option value="borrow_in">Взял в долг</option>
-              <option value="borrow_repayment">Вернул долг</option>
-              <option value="transfer">Переводы</option>
             </select>
           </label>
           <label class="field-wrap">
@@ -1674,8 +1738,9 @@ export function miniAppHtml() {
         <button class="icon-btn" id="closeSheet" title="Закрыть" aria-label="Закрыть детали">×</button>
       </div>
       <div class="details" id="sheetDetails"></div>
-      <div class="actions">
-        <button class="primary" id="sheetCloseAction">Готово</button>
+      <div class="actions" id="sheetActions">
+        <button class="secondary" id="sheetCloseAction">Готово</button>
+        <button class="primary" id="sheetSave">Сохранить</button>
         <button class="danger" id="sheetAction">Удалить</button>
       </div>
     </section>
@@ -1687,6 +1752,7 @@ export function miniAppHtml() {
     const state = {
       period: "month",
       tab: "overview",
+      kindPreset: "all",
       data: null,
       records: [],
       categories: [],
@@ -1724,8 +1790,14 @@ export function miniAppHtml() {
       loadRecords();
     });
     document.getElementById("statusFilter").addEventListener("change", loadRecords);
-    document.getElementById("kindFilter").addEventListener("change", loadRecords);
     document.getElementById("categoryFilter").addEventListener("change", loadRecords);
+    document.getElementById("kindQuick").addEventListener("click", function(event) {
+      const button = event.target.closest("button[data-kind-preset]");
+      if (!button) return;
+      state.kindPreset = button.dataset.kindPreset || "all";
+      setActive("#kindQuick button", button);
+      loadRecords();
+    });
     document.getElementById("recordSearch").addEventListener("input", function() {
       clearTimeout(state.searchTimer);
       state.searchTimer = setTimeout(loadRecords, 220);
@@ -1746,6 +1818,7 @@ export function miniAppHtml() {
     });
     document.getElementById("closeSheet").addEventListener("click", closeSheet);
     document.getElementById("sheetCloseAction").addEventListener("click", closeSheet);
+    document.getElementById("sheetSave").addEventListener("click", runSheetSave);
     document.getElementById("sheetBackdrop").addEventListener("click", function(event) {
       if (event.target.id === "sheetBackdrop") closeSheet();
     });
@@ -1863,7 +1936,8 @@ export function miniAppHtml() {
         const data = await api("/api/transactions", {
           period: state.period,
           status: document.getElementById("statusFilter").value,
-          kind: document.getElementById("kindFilter").value,
+          kind: state.kindPreset === "expense" || state.kindPreset === "income" ? state.kindPreset : "all",
+          kind_group: state.kindPreset === "debt" ? "debt" : "all",
           category: document.getElementById("categoryFilter").value,
           query: document.getElementById("recordSearch").value,
           limit: 50
@@ -1924,16 +1998,8 @@ export function miniAppHtml() {
 
     function updateDebtsTab(items) {
       const button = document.querySelector("[data-tab='debts']");
-      const tabs = document.getElementById("tabs");
       const hasDebts = hasOpenDebts(items);
-      button.hidden = !hasDebts;
-      tabs.classList.toggle("compact", !hasDebts);
-      if (!hasDebts && state.tab === "debts") {
-        state.tab = "overview";
-        const overviewButton = document.querySelector("[data-tab='overview']");
-        setActive("#tabs button", overviewButton);
-        for (const view of document.querySelectorAll(".view")) view.classList.toggle("active", view.id === "view-overview");
-      }
+      button.classList.toggle("has-data", hasDebts);
     }
 
     function hasOpenDebts(items) {
@@ -2161,15 +2227,17 @@ export function miniAppHtml() {
       const isDeleted = item.status === "deleted";
       document.getElementById("sheetTitle").textContent = item.description || item.raw_text || "Запись";
       document.getElementById("sheetSubtitle").textContent = "ID " + item.id + " · " + formatDate(item.local_date) + " · " + (isDeleted ? "удалена" : "активна");
-      document.getElementById("sheetDetails").innerHTML = [
+      document.getElementById("sheetDetails").innerHTML = isDeleted ? [
         detail("Сумма", money(item.amount_minor)),
         detail("Тип", kindLabel(item.kind)),
         detail("Категория", [item.category, item.subcategory].filter(Boolean).join(" · ") || "Не указана"),
         detail("Контрагент", item.counterparty || "Не указан"),
         detail("Дата", item.local_date),
-        detail("Статус", isDeleted ? "Удалена" : "Активна"),
+        detail("Статус", "Удалена"),
         detail("Исходный текст", item.raw_text || "", true)
-      ].join("");
+      ].join("") : editForm(item);
+      document.getElementById("sheetSave").hidden = isDeleted;
+      document.getElementById("sheetActions").classList.toggle("editing", !isDeleted);
       document.getElementById("sheetAction").textContent = isDeleted ? "Восстановить" : "Удалить";
       document.getElementById("sheetAction").className = isDeleted ? "primary" : "danger";
       document.getElementById("sheetBackdrop").classList.add("open");
@@ -2236,6 +2304,34 @@ export function miniAppHtml() {
       }
     }
 
+    async function runSheetSave() {
+      if (!state.selected || state.selected.status === "deleted") return;
+      const button = document.getElementById("sheetSave");
+      button.disabled = true;
+      try {
+        const payload = {
+          id: state.selected.id,
+          action: "update",
+          amount: document.getElementById("editAmount").value,
+          local_date: document.getElementById("editDate").value,
+          kind: document.getElementById("editKind").value,
+          category: document.getElementById("editCategory").value,
+          subcategory: document.getElementById("editSubcategory").value,
+          counterparty: document.getElementById("editCounterparty").value,
+          description: document.getElementById("editDescription").value,
+          raw_text: document.getElementById("editRawText").value
+        };
+        await api("/api/transaction-action", payload);
+        closeSheet();
+        await loadOverview();
+        await loadRecords();
+      } catch (error) {
+        alert(error.message);
+      } finally {
+        button.disabled = false;
+      }
+    }
+
     function confirmAction(message) {
       if (tg && typeof tg.showConfirm === "function") {
         return new Promise(function(resolve) { tg.showConfirm(message, resolve); });
@@ -2282,6 +2378,31 @@ export function miniAppHtml() {
 
     function detail(label, value, full) {
       return "<div class='detail" + (full ? " full" : "") + "'><div class='label'>" + escapeHtml(label) + "</div><div class='value'>" + escapeHtml(value || "—") + "</div></div>";
+    }
+
+    function editForm(item) {
+      return "<form class='edit-form' id='editForm'>" +
+        editField("Сумма", "editAmount", Number(item.amount_minor || 0) / 100, "number", "0.01") +
+        editField("Дата", "editDate", item.local_date || "", "date") +
+        "<label class='edit-field'><span class='field-label'>Тип</span><select class='field' id='editKind'>" + kindOptions(item.kind) + "</select></label>" +
+        editField("Категория", "editCategory", item.category || "", "text") +
+        editField("Подкатегория", "editSubcategory", item.subcategory || "", "text") +
+        editField("Контрагент", "editCounterparty", item.counterparty || "", "text") +
+        editField("Описание", "editDescription", item.description || "", "text", null, true) +
+        "<label class='edit-field full'><span class='field-label'>Исходный текст</span><textarea class='field' id='editRawText'>" + escapeHtml(item.raw_text || "") + "</textarea></label>" +
+      "</form>";
+    }
+
+    function editField(label, id, value, type, step, full) {
+      const extra = step ? " step='" + escapeAttr(step) + "'" : "";
+      return "<label class='edit-field" + (full ? " full" : "") + "'><span class='field-label'>" + escapeHtml(label) + "</span><input class='field' id='" + escapeAttr(id) + "' type='" + escapeAttr(type || "text") + "' value='" + escapeAttr(value) + "'" + extra + "></label>";
+    }
+
+    function kindOptions(current) {
+      const options = ["expense", "income", "loan_out", "loan_repayment", "borrow_in", "borrow_repayment", "transfer", "correction"];
+      return options.map(function(kind) {
+        return "<option value='" + escapeAttr(kind) + "'" + (kind === current ? " selected" : "") + ">" + escapeHtml(kindLabel(kind)) + "</option>";
+      }).join("");
     }
 
     function selectedKzt(items) {
@@ -2397,8 +2518,6 @@ export function miniAppHtml() {
     function showAccessError(message) {
       document.getElementById("profile").textContent = "Ошибка доступа";
       document.getElementById("syncStatus").textContent = "Нужен запуск из Telegram";
-      document.querySelector("[data-tab='debts']").hidden = true;
-      document.getElementById("tabs").classList.add("compact");
       document.getElementById("heroSpend").textContent = "Нет данных";
       document.getElementById("heroMeta").textContent = message;
       document.getElementById("insightText").textContent = "Откройте Mini App из Telegram, чтобы увидеть личную аналитику.";

@@ -942,24 +942,12 @@ async function insertTransaction(env, { updateId, user, chatId, intent, rawText 
     .first();
   if (existing) return existing;
 
-  const searchText = buildTransactionSearchText({
-    kind: intent.kind,
-    amount_minor: amountMinor,
-    currency: intent.currency || user.currency,
-    category: intent.category,
-    subcategory: intent.subcategory,
-    counterparty: intent.counterparty,
-    description: intent.description,
-    raw_text: rawText,
-    local_date: localDate
-  });
-
   const row = await env.DB.prepare(
     `INSERT INTO transactions (
       telegram_update_id, user_id, chat_id, kind, amount_minor, currency,
       category, subcategory, counterparty, description, raw_text,
-      occurred_at, local_date, metadata_json, search_text, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      occurred_at, local_date, metadata_json, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     RETURNING id, kind, amount_minor, currency, category, subcategory, counterparty, description, local_date`
   )
     .bind(
@@ -977,7 +965,6 @@ async function insertTransaction(env, { updateId, user, chatId, intent, rawText 
       nowIso,
       localDate,
       JSON.stringify({ confidence: intent.confidence, date_text: intent.date_text }),
-      searchText,
       nowIso,
       nowIso
     )
@@ -1321,16 +1308,14 @@ async function searchTransactions(env, { userId, bounds, status, kind, kindGroup
   }
   if (query) {
     const pattern = `%${escapeSqlLike(query)}%`;
-    const normalizedPattern = `%${escapeSqlLike(normalizeSearchText(query))}%`;
     conditions.push(`(
-      search_text LIKE ? ESCAPE '\\' OR
       description LIKE ? ESCAPE '\\' OR
       raw_text LIKE ? ESCAPE '\\' OR
       category LIKE ? ESCAPE '\\' OR
       subcategory LIKE ? ESCAPE '\\' OR
       counterparty LIKE ? ESCAPE '\\'
     )`);
-    binds.push(normalizedPattern, pattern, pattern, pattern, pattern, pattern);
+    binds.push(pattern, pattern, pattern, pattern, pattern);
   }
 
   const items = await env.DB.prepare(
@@ -1399,22 +1384,10 @@ async function updateTransactionFromMiniApp(env, userId, row, body) {
   const counterparty = limitText(cleanText(body.counterparty), 60);
   const amountMinor = toMinor(amount);
   const now = new Date().toISOString();
-  const searchText = buildTransactionSearchText({
-    kind,
-    amount_minor: amountMinor,
-    currency: row.currency || ONLY_SUPPORTED_CURRENCY,
-    category: category.category,
-    subcategory: category.subcategory,
-    counterparty,
-    description,
-    raw_text: rawText,
-    local_date: localDate
-  });
-
   const result = await env.DB.prepare(
     `UPDATE transactions
     SET kind = ?, amount_minor = ?, category = ?, subcategory = ?, counterparty = ?,
-      description = ?, raw_text = ?, local_date = ?, search_text = ?, updated_at = ?
+      description = ?, raw_text = ?, local_date = ?, updated_at = ?
     WHERE user_id = ? AND id = ? AND status = 'active'`
   )
     .bind(
@@ -1426,7 +1399,6 @@ async function updateTransactionFromMiniApp(env, userId, row, body) {
       description,
       rawText,
       localDate,
-      searchText,
       now,
       userId,
       row.id

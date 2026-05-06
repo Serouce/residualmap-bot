@@ -76,7 +76,6 @@ Optional GitHub Actions deploy secrets:
 
 - `CLOUDFLARE_API_TOKEN`
 - `CLOUDFLARE_ACCOUNT_ID`
-- `ALLOWED_TELEGRAM_IDS`
 
 ## Deployment outline
 
@@ -100,4 +99,4 @@ curl -X POST -H "Authorization: Bearer $SETUP_TOKEN" https://your-worker.example
 
 ## GitHub workflow
 
-Pushes to `main` trigger `.github/workflows/deploy.yml`: install dependencies, run `npm run check`, apply D1 migrations remotely, sync `ALLOWED_TELEGRAM_IDS` as a Worker secret, and deploy the Worker. Configure `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, and `ALLOWED_TELEGRAM_IDS` in repository secrets before relying on the workflow.
+Pushes to `main` trigger `.github/workflows/deploy.yml`: install dependencies, run `npm run check`, apply D1 migrations remotely, and deploy the Worker with `--keep-vars` so Cloudflare-stored Worker secrets and dashboard variables stay attached. Configure `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` in repository secrets before relying on the workflow.

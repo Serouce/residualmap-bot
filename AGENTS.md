@@ -14,8 +14,9 @@
 
 - `src/worker.js` - main Worker, Telegram webhook handlers, Mini App API routes, OpenAI calls, D1 queries, and CSV export.
 - `src/mini-app.js` - Telegram Mini App HTML/CSS/JS for analytics, records, debts, and transaction detail actions.
-- `migrations/0001_initial.sql` - D1 schema for users, processed updates, transactions, audit log, and category aliases.
+- `migrations/*.sql` - D1 schema and additive migrations for idempotency/status tracking and transaction search metadata.
 - `wrangler.toml` - Worker name, entrypoint, non-secret vars, and D1 binding.
+- `.github/workflows/deploy.yml` - GitHub Actions check, migration, and deploy workflow for pushes to `main`.
 - `.dev.vars.example` - example local secret/config values.
 - `README.md` - user-facing project overview and bot commands.
 
@@ -66,7 +67,7 @@ There is currently no dedicated build step and no automated test suite in `packa
 - Use prepared D1 statements with `.bind()` for all user-controlled values.
 - Keep deletes soft: set transaction `status = 'deleted'`, set `deleted_at`, and write to `audit_log`.
 - Keep Telegram access restricted through `ALLOWED_TELEGRAM_IDS`.
-- Do not commit real secrets. Use Cloudflare secrets or local `.dev.vars`; `.dev.vars.example` must stay placeholder-only.
+- Do not commit real secrets or personal Telegram IDs. Use Cloudflare secrets or local `.dev.vars`; `.dev.vars.example` must stay placeholder-only.
 - Escape user-controlled output sent with Telegram `parse_mode: "HTML"` using `escapeHtml()`.
 - Preserve Telegram Mini App auth validation through `validateTelegramInitData()` before returning user data from `/api/app-data`.
 - If changing Mini App UI, prefer editing `src/mini-app.js`; keep API contract changes in `src/worker.js` explicit and narrow.

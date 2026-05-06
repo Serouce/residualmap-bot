@@ -80,6 +80,15 @@ const CATEGORY_RULES = [
   },
   {
     category: "Еда",
+    subcategory: "Доставка",
+    patterns: [
+      /доставка\s+еды/i,
+      /доставк.*(еда|суши|пицц|бургер|ролл|обед|ужин|донер|шаурм)/i,
+      /(wolt|glovo|яндекс\s*еда|yandex\s*eats|delivery\s*club|chocofood|самокат|лавка|arbuz)/i
+    ]
+  },
+  {
+    category: "Еда",
     subcategory: "Кафе и рестораны",
     patterns: [/кафе/i, /кофе/i, /ресторан/i, /донер/i, /шаурм/i, /бургер/i, /обед/i, /ужин/i]
   },
@@ -143,6 +152,100 @@ const CATEGORY_RULES = [
     patterns: [/маркет/i, /wildberries/i, /ozon/i, /kaspi/i, /купил/i, /купила/i]
   }
 ];
+
+const CATEGORY_ALIASES = [
+  {
+    category: "Еда",
+    subcategory: "Доставка",
+    labels: [
+      "Еда Доставка",
+      "Еда Доставка еды",
+      "Доставка еды",
+      "Доставка",
+      "Wolt",
+      "Glovo",
+      "Яндекс Еда",
+      "Yandex Eats",
+      "Delivery Club",
+      "Chocofood"
+    ]
+  },
+  {
+    category: "Еда",
+    subcategory: "Кафе и рестораны",
+    labels: [
+      "Еда Кафе",
+      "Еда Рестораны",
+      "Кафе",
+      "Рестораны",
+      "Кафе рестораны"
+    ]
+  },
+  {
+    category: "Еда",
+    subcategory: "Продукты",
+    labels: [
+      "Еда Продукты",
+      "Продукты питания",
+      "Супермаркет",
+      "Супермаркеты",
+      "Гипермаркет"
+    ]
+  },
+  {
+    category: "Транспорт",
+    subcategory: "Такси",
+    labels: [
+      "Транспорт Такси",
+      "Яндекс Такси",
+      "Yandex Taxi",
+      "Такси"
+    ]
+  },
+  {
+    category: "Транспорт",
+    subcategory: "Общественный транспорт",
+    labels: [
+      "Транспорт Общественный транспорт",
+      "Общественный транспорт",
+      "Автобус",
+      "Метро",
+      "Маршрутка"
+    ]
+  },
+  {
+    category: "Связь",
+    subcategory: "Мобильная связь",
+    labels: [
+      "Связь Мобильная связь",
+      "Мобильная связь",
+      "Сотовая связь",
+      "Телефонный тариф"
+    ]
+  },
+  {
+    category: "Здоровье",
+    subcategory: "Аптека",
+    labels: [
+      "Здоровье Аптека",
+      "Аптека",
+      "Лекарства"
+    ]
+  },
+  {
+    category: "Дом",
+    subcategory: "Коммунальные услуги",
+    labels: [
+      "Дом Коммунальные услуги",
+      "Коммунальные услуги",
+      "Коммуналка",
+      "ЖКХ"
+    ]
+  }
+].map((alias) => ({
+  ...alias,
+  normalizedLabels: alias.labels.map(normalizeCategoryLabel)
+}));
 
 const INTENT_SCHEMA = {
   type: "object",
@@ -604,11 +707,18 @@ async function handleTelegramUpdate(update, env) {
       return;
     }
 
+    const category = await resolveCanonicalCategory(env, user.id, {
+      rawText: text,
+      kind: intent.kind,
+      category: intent.category,
+      subcategory: intent.subcategory
+    });
+
     const inserted = await insertTransaction(env, {
       updateId,
       user,
       chatId,
-      intent,
+      intent: { ...intent, ...category },
       rawText: text
     });
 
@@ -743,8 +853,10 @@ async function classifyText(env, text) {
     "Ответ должен быть коротким: description до 120 символов, category/subcategory до 40 символов.",
     "Предпочитай стабильные категории из списка, но можешь создать новую категорию, если ни одна не подходит.",
     "Стабильные категории: Транспорт, Еда, Связь, Одежда, Подарки, Семья, Здоровье, Дом, Подписки, Покупки, Развлечения, Образование, Доход, Долги, Прочее.",
+    "Не дроби синонимы: похожие подкатегории должны совпадать с уже используемым каноном.",
     "Правила:",
     "- '1400 такси' это expense, Транспорт > Такси.",
+    "- 'wolt 5100' или 'доставка еды 5100' это expense, Еда > Доставка.",
     "- 'скинул 5000 на день рождения коллеги' это expense, Подарки > Коллеги.",
     "- 'закинул тариф 3500' это expense, Связь > Мобильная связь.",
     "- 'купил одежду 28000' это expense, Одежда > Одежда.",
@@ -874,6 +986,9 @@ function normalizeCategory({ rawText, kind, category, subcategory }) {
   }
   if (kind === "transfer") return { category: "Переводы", subcategory: "Между счетами" };
 
+  const labelCanonical = canonicalCategoryFromLabels(category, subcategory);
+  if (labelCanonical) return labelCanonical;
+
   const haystack = `${rawText || ""} ${category || ""} ${subcategory || ""}`.toLowerCase();
   for (const rule of CATEGORY_RULES) {
     if (rule.patterns.some((pattern) => pattern.test(haystack))) {
@@ -882,10 +997,141 @@ function normalizeCategory({ rawText, kind, category, subcategory }) {
   }
 
   const inferred = inferCategory(String(rawText || "").toLowerCase(), kind);
-  return {
+  const normalized = {
     category: limitText(cleanText(category) || inferred.category || "Прочее", 40),
     subcategory: limitText(cleanText(subcategory) || inferred.subcategory || "Без категории", 40)
   };
+  return canonicalCategoryFromLabels(normalized.category, normalized.subcategory) || normalized;
+}
+
+function canonicalCategoryFromLabels(category, subcategory) {
+  const categoryLabel = normalizeCategoryLabel(category);
+  const subcategoryLabel = normalizeCategoryLabel(subcategory);
+  const pairLabel = [categoryLabel, subcategoryLabel].filter(Boolean).join(" ");
+  for (const alias of CATEGORY_ALIASES) {
+    if (alias.normalizedLabels.includes(pairLabel)) return { category: alias.category, subcategory: alias.subcategory };
+    if (categoryLabel === normalizeCategoryLabel(alias.category) && alias.normalizedLabels.includes(subcategoryLabel)) {
+      return { category: alias.category, subcategory: alias.subcategory };
+    }
+  }
+  return null;
+}
+
+function normalizeCategoryLabel(value) {
+  return String(value || "")
+    .normalize("NFKC")
+    .toLowerCase()
+    .replaceAll("ё", "е")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+async function resolveCanonicalCategory(env, userId, input) {
+  const canonical = normalizeCategory(input);
+  if (input.kind !== "expense") return canonical;
+
+  const dbCanonical = await findCategoryAlias(env, userId, canonical.category, canonical.subcategory);
+  return dbCanonical || canonical;
+}
+
+async function findCategoryAlias(env, userId, category, subcategory) {
+  if (!env?.DB) return null;
+  const candidates = categoryAliasCandidates(category, subcategory);
+  if (!candidates.size) return null;
+
+  try {
+    const rows = await env.DB.prepare(
+      `SELECT user_id, alias, category, subcategory
+      FROM category_aliases
+      WHERE user_id IS NULL OR user_id = ?`
+    )
+      .bind(userId)
+      .all();
+
+    const aliases = (rows.results || []).sort((left, right) => {
+      const leftScore = Number(left.user_id === userId ? 0 : 1);
+      const rightScore = Number(right.user_id === userId ? 0 : 1);
+      return leftScore - rightScore;
+    });
+
+    for (const alias of aliases) {
+      if (candidates.has(normalizeCategoryLabel(alias.alias))) {
+        return {
+          category: limitText(cleanText(alias.category), 40) || category,
+          subcategory: limitText(cleanText(alias.subcategory), 40) || subcategory
+        };
+      }
+    }
+  } catch (error) {
+    console.warn("category alias lookup failed", error);
+  }
+
+  return null;
+}
+
+function categoryAliasCandidates(category, subcategory) {
+  const categoryLabel = normalizeCategoryLabel(category);
+  const subcategoryLabel = normalizeCategoryLabel(subcategory);
+  const candidates = new Set();
+  if (categoryLabel) candidates.add(categoryLabel);
+  if (subcategoryLabel) candidates.add(subcategoryLabel);
+  const pairLabel = [categoryLabel, subcategoryLabel].filter(Boolean).join(" ");
+  if (pairLabel) candidates.add(pairLabel);
+  return candidates;
+}
+
+function mergeCanonicalCategoryRows(rows, { includeSubcategory }) {
+  const merged = new Map();
+  for (const row of rows || []) {
+    const canonical = normalizeCategory({
+      rawText: "",
+      kind: "expense",
+      category: row.category,
+      subcategory: includeSubcategory ? row.subcategory : null
+    });
+    const key = [
+      row.currency || "",
+      canonical.category || "",
+      includeSubcategory ? canonical.subcategory || "" : ""
+    ].join("\u001f");
+    const current = merged.get(key) || {
+      ...row,
+      category: canonical.category,
+      subcategory: includeSubcategory ? canonical.subcategory : row.subcategory,
+      amount_minor: 0,
+      count: 0
+    };
+    current.amount_minor += Number(row.amount_minor || 0);
+    current.count += Number(row.count || 0);
+    merged.set(key, current);
+  }
+  return Array.from(merged.values()).sort((left, right) => Number(right.amount_minor || 0) - Number(left.amount_minor || 0));
+}
+
+function canonicalizeTransactionRow(row) {
+  if (!row) return row;
+  const canonical = normalizeCategory({
+    rawText: row.raw_text || row.description || "",
+    kind: row.kind,
+    category: row.category,
+    subcategory: row.subcategory
+  });
+  return { ...row, category: canonical.category, subcategory: canonical.subcategory };
+}
+
+function uniqueSortedCategories(rows) {
+  const categories = new Set();
+  for (const row of rows || []) {
+    const canonical = normalizeCategory({
+      rawText: "",
+      kind: "expense",
+      category: row.category,
+      subcategory: null
+    });
+    if (canonical.category) categories.add(canonical.category);
+  }
+  return Array.from(categories).sort((left, right) => left.localeCompare(right, "ru"));
 }
 
 function inferCategory(lower, kind) {
@@ -940,7 +1186,7 @@ async function insertTransaction(env, { updateId, user, chatId, intent, rawText 
   )
     .bind(updateId, user.id)
     .first();
-  if (existing) return existing;
+  if (existing) return canonicalizeTransactionRow(existing);
 
   const row = await env.DB.prepare(
     `INSERT INTO transactions (
@@ -971,7 +1217,7 @@ async function insertTransaction(env, { updateId, user, chatId, intent, rawText 
     .first();
 
   await audit(env, user.id, row.id, "create", row);
-  return row;
+  return canonicalizeTransactionRow(row);
 }
 
 function formatTransactionCreated(row) {
@@ -1064,7 +1310,7 @@ async function buildSummary(env, userId, bounds) {
       WHERE user_id = ? AND status = 'active' AND kind = 'expense' AND NOT (${FAMILY_HELP_EXPENSE_SQL}) AND local_date BETWEEN ? AND ?
       GROUP BY currency, category, subcategory
       ORDER BY amount_minor DESC
-      LIMIT 8`
+      LIMIT 24`
     ).bind(userId, bounds.start, bounds.end),
     env.DB.prepare(
       `SELECT
@@ -1076,7 +1322,7 @@ async function buildSummary(env, userId, bounds) {
       WHERE user_id = ? AND status = 'active' AND kind = 'expense' AND NOT (${FAMILY_HELP_EXPENSE_SQL}) AND local_date BETWEEN ? AND ?
       GROUP BY currency, category
       ORDER BY amount_minor DESC
-      LIMIT 10`
+      LIMIT 30`
     ).bind(userId, bounds.start, bounds.end),
     env.DB.prepare(
       `SELECT
@@ -1139,10 +1385,10 @@ async function buildSummary(env, userId, bounds) {
     period: bounds,
     transaction_count: transactionCount,
     totals_by_currency: totalsByCurrency,
-    categories: categories.results || [],
-    category_totals: categoryTotals.results || [],
+    categories: mergeCanonicalCategoryRows(categories.results || [], { includeSubcategory: true }).slice(0, 8),
+    category_totals: mergeCanonicalCategoryRows(categoryTotals.results || [], { includeSubcategory: false }).slice(0, 10),
     by_day: byDay.results || [],
-    largest_expenses: largestExpenses.results || [],
+    largest_expenses: (largestExpenses.results || []).map(canonicalizeTransactionRow),
     family_help: familyHelp.results || [],
     family_help_counterparties: familyHelpCounterparties.results || []
   };
@@ -1287,7 +1533,7 @@ async function listTransactions(env, userId, status, limit) {
   )
     .bind(userId, safeStatus, safeLimit)
     .all();
-  return rows.results || [];
+  return (rows.results || []).map(canonicalizeTransactionRow);
 }
 
 async function searchTransactions(env, { userId, bounds, status, kind, kindGroup, category, query, limit }) {
@@ -1338,19 +1584,20 @@ async function searchTransactions(env, { userId, bounds, status, kind, kindGroup
     .all();
 
   return {
-    items: items.results || [],
-    categories: (categories.results || []).map((row) => row.category).filter(Boolean)
+    items: (items.results || []).map(canonicalizeTransactionRow),
+    categories: uniqueSortedCategories(categories.results || [])
   };
 }
 
 async function getTransactionById(env, userId, id) {
-  return env.DB.prepare(
+  const row = await env.DB.prepare(
     `SELECT id, local_date, kind, amount_minor, currency, category, subcategory, counterparty, description, raw_text, status, deleted_at, created_at, updated_at
     FROM transactions
     WHERE user_id = ? AND id = ?`
   )
     .bind(userId, id)
     .first();
+  return canonicalizeTransactionRow(row);
 }
 
 async function updateTransactionFromMiniApp(env, userId, row, body) {
@@ -1375,7 +1622,7 @@ async function updateTransactionFromMiniApp(env, userId, row, body) {
   const description = limitText(cleanText(body.description) || rawText, 180);
   const categoryInput = limitText(cleanText(body.category), 40);
   const subcategoryInput = limitText(cleanText(body.subcategory), 40);
-  const category = normalizeCategory({
+  const category = await resolveCanonicalCategory(env, userId, {
     rawText,
     kind,
     category: categoryInput,
@@ -2185,7 +2432,9 @@ function timingSafeEqualString(a, b) {
 export const __testables = {
   extractAmount,
   fallbackClassify,
+  mergeCanonicalCategoryRows,
   normalizeIntent,
+  resolveCanonicalCategory,
   normalizeCurrency,
   isSupportedCurrency,
   bearerToken,

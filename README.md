@@ -99,4 +99,4 @@ curl -X POST -H "Authorization: Bearer $SETUP_TOKEN" https://your-worker.example
 
 ## GitHub workflow
 
-Pushes to `main` trigger `.github/workflows/deploy.yml`: install dependencies, run `npm run check`, apply D1 migrations remotely, and deploy the Worker with `--keep-vars` so Cloudflare-stored Worker secrets and dashboard variables stay attached. Configure `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` in repository secrets before relying on the workflow.
+Pushes to `main` trigger `.github/workflows/deploy.yml`: install dependencies, run `npm run check`, and deploy the Worker with `--keep-vars` so Cloudflare-stored Worker secrets and dashboard variables stay attached. D1 migrations are intentionally run manually with `npm run db:migrate` after confirming the Cloudflare token has D1 write access. Configure `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` in repository secrets before relying on the workflow.

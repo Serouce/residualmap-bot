@@ -2043,32 +2043,6 @@ function escapeSqlLike(value) {
   return String(value || "").replace(/[\\%_]/g, (char) => `\\${char}`);
 }
 
-function buildTransactionSearchText(row) {
-  return normalizeSearchText([
-    row.id,
-    row.local_date,
-    row.kind,
-    KIND_LABELS[row.kind],
-    row.amount_minor ? minorToNumber(row.amount_minor) : null,
-    row.currency,
-    row.category,
-    row.subcategory,
-    row.counterparty,
-    row.description,
-    row.raw_text
-  ].filter((value) => value !== null && value !== undefined).join(" "));
-}
-
-function normalizeSearchText(value) {
-  return String(value || "")
-    .normalize("NFKC")
-    .toLocaleLowerCase("ru-RU")
-    .replaceAll("ё", "е")
-    .replace(/[^\p{L}\p{N}]+/gu, " ")
-    .trim()
-    .replace(/\s+/g, " ");
-}
-
 function csvCell(value) {
   if (value === null || value === undefined) return "";
   let text = String(value);
@@ -2211,7 +2185,6 @@ function timingSafeEqualString(a, b) {
 export const __testables = {
   extractAmount,
   fallbackClassify,
-  normalizeSearchText,
   normalizeIntent,
   normalizeCurrency,
   isSupportedCurrency,

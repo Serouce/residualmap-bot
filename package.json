@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "node --check src/worker.js && node --check src/mini-app.js && node test/worker.test.js",
+    "check": "node --check src/worker.js && node --check src/mini-app.js && node --check src/mini-app-client.js && node --check src/mini-app-styles.js && node test/worker.test.js",
     "deploy": "wrangler deploy --keep-vars",
     "dev": "wrangler dev",
     "db:create": "wrangler d1 create residualmap_expenses",

@@ -34,8 +34,8 @@ Telegram bot for personal expense tracking on Cloudflare Workers, Cloudflare D1,
 
 The Mini App is a KZT-first dashboard with three views:
 
-- Overview: KPIs, daily income/expense chart, category infographic, and largest expenses.
-- Records: searchable and filterable transaction list with transaction details.
+- Overview: KPIs, daily income/expense chart, category infographic, largest expenses, and the separated family support panel at the end.
+- Records: searchable and filterable transactions with switchable feed, ledger table, and grouped-by-date views.
 - Debts: focused view of open receivables and payables.
 
 Mini App data is served through Telegram-authenticated JSON endpoints:

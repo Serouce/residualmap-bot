@@ -3,7 +3,15 @@ import test from "node:test";
 
 import { __testables } from "../src/worker.js";
 
-const { extractAmount, fallbackClassify, isSupportedCurrency, normalizeCurrency, normalizeIntent } = __testables;
+const {
+  extractAmount,
+  fallbackClassify,
+  isSupportedCurrency,
+  mergeCanonicalCategoryRows,
+  normalizeCurrency,
+  normalizeIntent,
+  resolveCanonicalCategory
+} = __testables;
 
 test("fallback parser recognizes a simple taxi expense", () => {
   const intent = fallbackClassify("1400 такси");
@@ -44,6 +52,37 @@ test("fallback parser recognizes income", () => {
 
   assert.equal(intent.kind, "income");
   assert.equal(intent.amount, 350000);
+});
+
+test("category normalization keeps food delivery aliases canonical", () => {
+  const intent = normalizeIntent(
+    {
+      kind: "expense",
+      amount: 5100,
+      currency: "KZT",
+      category: "Еда",
+      subcategory: "Доставка еды",
+      counterparty: null,
+      description: "wolt",
+      date_text: null,
+      period: null,
+      confidence: 1,
+      needs_confirmation: false
+    },
+    "wolt 5100",
+    {}
+  );
+
+  assert.equal(intent.category, "Еда");
+  assert.equal(intent.subcategory, "Доставка");
+});
+
+test("fallback parser recognizes food delivery brands", () => {
+  const intent = fallbackClassify("wolt 5100");
+
+  assert.equal(intent.kind, "expense");
+  assert.equal(intent.category, "Еда");
+  assert.equal(intent.subcategory, "Доставка");
 });
 
 test("fallback parser recognizes giving money as debt", () => {
@@ -112,4 +151,52 @@ test("currency policy is explicit KZT-only", () => {
 test("amount extraction supports common spacing and rejects period-only numbers", () => {
   assert.equal(extractAmount("такси 1 500 тг"), 1500);
   assert.equal(extractAmount("сколько за 30 дней"), null);
+});
+
+test("summary category rows merge canonical aliases", () => {
+  const rows = mergeCanonicalCategoryRows(
+    [
+      { currency: "KZT", category: "Еда", subcategory: "Доставка", amount_minor: 510000, count: 1 },
+      { currency: "KZT", category: "Еда", subcategory: "Доставка еды", amount_minor: 472400, count: 2 }
+    ],
+    { includeSubcategory: true }
+  );
+
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].category, "Еда");
+  assert.equal(rows[0].subcategory, "Доставка");
+  assert.equal(rows[0].amount_minor, 982400);
+  assert.equal(rows[0].count, 3);
+});
+
+test("database category aliases can canonicalize future duplicate labels", async () => {
+  const env = {
+    DB: {
+      prepare() {
+        return {
+          bind() {
+            return {
+              async all() {
+                return {
+                  results: [
+                    { user_id: null, alias: "Кофейни", category: "Еда", subcategory: "Кафе и рестораны" }
+                  ]
+                };
+              }
+            };
+          }
+        };
+      }
+    }
+  };
+
+  const category = await resolveCanonicalCategory(env, 1, {
+    rawText: "",
+    kind: "expense",
+    category: "Кофейни",
+    subcategory: null
+  });
+
+  assert.equal(category.category, "Еда");
+  assert.equal(category.subcategory, "Кафе и рестораны");
 });

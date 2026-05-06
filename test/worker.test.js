@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { __testables } from "../src/worker.js";
 
-const { extractAmount, fallbackClassify, isSupportedCurrency, normalizeCurrency, normalizeIntent, normalizeSearchText } = __testables;
+const { extractAmount, fallbackClassify, isSupportedCurrency, normalizeCurrency, normalizeIntent } = __testables;
 
 test("fallback parser recognizes a simple taxi expense", () => {
   const intent = fallbackClassify("1400 такси");
@@ -112,8 +112,4 @@ test("currency policy is explicit KZT-only", () => {
 test("amount extraction supports common spacing and rejects period-only numbers", () => {
   assert.equal(extractAmount("такси 1 500 тг"), 1500);
   assert.equal(extractAmount("сколько за 30 дней"), null);
-});
-
-test("search text normalization handles russian case and yo", () => {
-  assert.equal(normalizeSearchText("Ёлка, ЕДА и Такси!"), "елка еда и такси");
 });

@@ -17,6 +17,7 @@ export const miniAppClientScript = `
       sort: normalizeSort(readJsonPref(storageKeys.sort, { field: "date", dir: "desc" })),
       data: null,
       records: [],
+      imports: [],
       categories: [],
       selected: null,
       searchTimer: null,
@@ -42,16 +43,17 @@ export const miniAppClientScript = `
       $("tabs").addEventListener("click", function(event) {
         const button = event.target.closest("button[data-tab]");
         if (!button) return;
-        state.tab = button.dataset.tab;
-        setActive("#tabs button", button);
-        for (const view of document.querySelectorAll(".view")) {
-          view.classList.toggle("active", view.id === "view-" + state.tab);
-        }
-        if (state.tab === "records") loadRecords();
-        if (state.tab === "overview") scheduleChartRerender();
+        switchTab(button.dataset.tab);
+      });
+      $("tabs").addEventListener("keydown", handleTabsKeydown);
+      $("importAttention").addEventListener("click", function(event) {
+        const button = event.target.closest("button[data-open-tab]");
+        if (!button) return;
+        switchTab(button.dataset.openTab);
       });
 
       $("refresh").addEventListener("click", loadAll);
+      $("refreshImports").addEventListener("click", loadImports);
       $("clearSearch").addEventListener("click", function() {
         const input = $("recordSearch");
         input.value = "";
@@ -86,6 +88,7 @@ export const miniAppClientScript = `
         state.searchTimer = setTimeout(loadRecords, 220);
       });
       $("recordsCanvas").addEventListener("click", handleRecordsAction);
+      $("importsCanvas").addEventListener("click", handleImportAction);
       $("recordsCanvas").addEventListener("keydown", function(event) {
         if (event.key !== "Enter" && event.key !== " ") return;
         const row = event.target.closest("[data-id]");
@@ -102,6 +105,34 @@ export const miniAppClientScript = `
       });
       $("sheetBackdrop").addEventListener("keydown", handleSheetKeydown);
       window.addEventListener("resize", scheduleChartRerender);
+    }
+
+    function switchTab(tab) {
+      const button = document.querySelector("[data-tab='" + tab + "']");
+      if (!button) return;
+      state.tab = button.dataset.tab;
+      setActive("#tabs button", button);
+      for (const view of document.querySelectorAll(".view")) {
+        view.classList.toggle("active", view.id === "view-" + state.tab);
+      }
+      if (state.tab === "records") loadRecords();
+      if (state.tab === "import") loadImports();
+      if (state.tab === "overview") scheduleChartRerender();
+    }
+
+    function handleTabsKeydown(event) {
+      if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+      const buttons = Array.from(document.querySelectorAll("#tabs button[data-tab]"));
+      const current = buttons.indexOf(document.activeElement);
+      if (current === -1) return;
+      event.preventDefault();
+      let next = current;
+      if (event.key === "ArrowLeft") next = (current - 1 + buttons.length) % buttons.length;
+      if (event.key === "ArrowRight") next = (current + 1) % buttons.length;
+      if (event.key === "Home") next = 0;
+      if (event.key === "End") next = buttons.length - 1;
+      buttons[next].focus();
+      switchTab(buttons[next].dataset.tab);
     }
 
     function $(id) {
@@ -210,6 +241,7 @@ export const miniAppClientScript = `
       try {
         await loadOverview();
         if (state.tab === "records") await loadRecords();
+        if (state.tab === "import") await loadImports();
         setLoadingState(false, "Обновлено только что");
       } catch (error) {
         setLoadingState(false, "Не удалось обновить");
@@ -249,31 +281,47 @@ export const miniAppClientScript = `
       }
     }
 
+    async function loadImports() {
+      if (!initData()) return;
+      $("importsCanvas").innerHTML = "<div class='skeleton'></div><div class='skeleton'></div>";
+      try {
+        const data = await api("/api/imports", { limit: 12 });
+        state.imports = data.imports || [];
+        renderImports();
+        updateImportsTab({ draft_count: data.draft_count || 0, latest: state.imports[0] || null });
+      } catch (error) {
+        $("importsCanvas").innerHTML = "<div class='error'>" + escapeHtml(error.message) + "</div>";
+      }
+    }
+
     function renderOverview(data) {
       const summary = data.summary;
       const total = selectedKzt(summary.totals_by_currency || []);
       const expense = Number(total.expense_minor || 0);
       const income = Number(total.income_minor || 0);
       const net = income - expense;
-      const periodDays = dayCount(summary.period.start, summary.period.end);
-      const series = buildDailySeries(summary);
-      const activeDays = series.filter(function(item) { return item.expense_minor > 0; }).length;
       const topCategory = firstKzt(summary.category_totals || []);
       const topCategoryPct = topCategory && expense ? Math.round(Number(topCategory.amount_minor || 0) / expense * 100) : 0;
+      const importsSummary = data.imports_summary || {};
+      const draftImportCount = Number(importsSummary.draft_count || 0);
+      const latestImport = importsSummary.latest || null;
       $("profile").textContent = "KZT · " + (data.user.timezone || "Asia/Qyzylorda");
       $("periodName").textContent = summary.period.label;
       $("heroSpend").textContent = money(expense);
       $("heroMeta").textContent = "Личные расходы · " + formatRange(summary.period.start, summary.period.end) + " · " + plural(summary.transaction_count || 0, "запись", "записи", "записей");
       $("netFlow").textContent = signedMoney(net);
       $("sideNote").textContent = "Доходы минус личные расходы.";
-      $("insightText").textContent = insightText(expense, income, topCategory, topCategoryPct, activeDays, periodDays);
       $("rangeLabel").textContent = formatRange(summary.period.start, summary.period.end);
       updateDebtsTab(data.debts || []);
+      updateImportsTab(importsSummary);
+      renderImportAttention(importsSummary);
       $("metrics").innerHTML = [
         metric("Доходы", money(income), "поступления", "income"),
         metric("Чистый поток", signedMoney(net), "доходы минус расходы", net >= 0 ? "income" : "expense"),
         metric("Топ категория", topCategory ? topCategory.category : "Пока нет", topCategory ? topCategoryPct + "% · " + money(topCategory.amount_minor) : "нет расходов"),
-        metric("Дней с расходами", activeDays + " из " + periodDays, "активные дни периода")
+        metric("Импорт", draftImportCount > 0 ? draftImportCount + " черн." : latestImport ? importStatusLabel(latestImport.status) : "Нет",
+          draftImportCount > 0 ? "требует решения" : latestImport ? (latestImport.file_name || "последняя выписка") : "PDF можно отправить боту",
+          draftImportCount > 0 ? "debt" : "")
       ].join("");
 
       renderDailyChart(summary);
@@ -284,17 +332,31 @@ export const miniAppClientScript = `
       renderDebts(data.debts || [], "debtsFull", 50);
     }
 
-    function insightText(expense, income, topCategory, topCategoryPct, activeDays, periodDays) {
-      if (expense > 0 && topCategory) {
-        return "Основная категория: " + topCategory.category + ", " + topCategoryPct + "% расходов. Дней с расходами: " + activeDays + " из " + periodDays + ".";
-      }
-      if (income > 0) return "Личных расходов пока нет; доходы уже учтены в чистом потоке.";
-      return "За этот период пока нет личных расходов. Добавьте запись в чате, и здесь появится аналитика.";
-    }
-
     function updateDebtsTab(items) {
       const button = document.querySelector("[data-tab='debts']");
       button.classList.toggle("has-data", hasOpenDebts(items));
+    }
+
+    function updateImportsTab(summary) {
+      const button = document.querySelector("[data-tab='import']");
+      if (!button) return;
+      button.classList.toggle("has-data", Number(summary && summary.draft_count || 0) > 0);
+    }
+
+    function renderImportAttention(summary) {
+      const root = $("importAttention");
+      const latest = summary && summary.latest;
+      const draftCount = Number(summary && summary.draft_count || 0);
+      if (!root || draftCount <= 0 || !latest) {
+        root.hidden = true;
+        if (root) root.innerHTML = "";
+        return;
+      }
+      root.hidden = false;
+      root.innerHTML =
+        "<div><div class='notice-title'>" + escapeHtml(plural(draftCount, "черновик импорта", "черновика импорта", "черновиков импорта")) + "</div>" +
+        "<div class='notice-meta'>" + escapeHtml((latest.file_name || "PDF-выписка") + " · " + importPeriod(latest) + " · к записи " + (latest.importable_count || 0)) + "</div></div>" +
+        "<button class='secondary' type='button' data-open-tab='import'>Открыть</button>";
     }
 
     function hasOpenDebts(items) {
@@ -308,7 +370,7 @@ export const miniAppClientScript = `
     }
 
     function showOverviewSkeletons() {
-      $("insightText").textContent = "Обновляю финансовую картину...";
+      $("importAttention").hidden = true;
       $("metrics").innerHTML = "<div class='skeleton'></div><div class='skeleton'></div><div class='skeleton'></div><div class='skeleton'></div>";
       $("dailyChart").innerHTML = "<div class='skeleton'></div>";
       $("categoryTotals").innerHTML = "<div class='skeleton'></div>";
@@ -511,6 +573,116 @@ export const miniAppClientScript = `
         renderGroupedRecords(sorted);
       } else {
         renderFeedRecords(sorted);
+      }
+    }
+
+    function renderImports() {
+      const root = $("importsCanvas");
+      $("importCount").textContent = plural(state.imports.length, "импорт", "импорта", "импортов");
+      if (!state.imports.length) {
+        root.innerHTML = "<div class='empty import-empty'>Отправьте PDF-выписку боту в Telegram. Здесь появятся черновики, дубли, пропущенные строки и история подтверждений.</div>";
+        return;
+      }
+      root.innerHTML = "";
+      const fragment = document.createDocumentFragment();
+      for (const batch of state.imports) fragment.appendChild(importCard(batch));
+      root.appendChild(fragment);
+    }
+
+    function importCard(batch) {
+      const element = document.createElement("article");
+      const status = batch.status || "draft";
+      const importable = Number(batch.importable_count || 0);
+      element.className = "import-card import-" + status;
+      element.innerHTML =
+        "<div class='import-card-head'>" +
+          "<div class='import-title-wrap'><div class='import-title'></div><div class='import-subtitle'></div></div>" +
+          "<span class='status-badge status-" + escapeAttr(status) + "'>" + escapeHtml(importStatusLabel(status)) + "</span>" +
+        "</div>" +
+        "<div class='import-facts'>" +
+          importFact("Период", importPeriod(batch)) +
+          importFact("Строки", String(batch.item_count || 0)) +
+          importFact("К записи", String(importable)) +
+          importFact("Дубли", String(batch.duplicate_count || 0)) +
+          importFact("Пропущено", String(batch.skipped_count || 0)) +
+          importFact("Расход", money(batch.expense_minor || 0), "expense") +
+          importFact("Доход", money(batch.income_minor || 0), "income") +
+          importFact("Импортировано", String(batch.import_count || 0)) +
+        "</div>" +
+        importWarning(batch) +
+        "<div class='import-preview'>" + importPreviewRows(batch.items || []) + "</div>" +
+        importActions(batch, importable);
+      element.querySelector(".import-title").textContent = batch.file_name || batch.source_name || "PDF-выписка";
+      element.querySelector(".import-subtitle").textContent = [
+        batch.source_name,
+        batch.created_at ? "создан " + formatDateTime(batch.created_at) : "",
+        batch.confirmed_at ? "подтвержден " + formatDateTime(batch.confirmed_at) : "",
+        batch.cancelled_at ? "отменен " + formatDateTime(batch.cancelled_at) : ""
+      ].filter(Boolean).join(" · ");
+      return element;
+    }
+
+    function importFact(label, value, tone) {
+      return "<div class='import-fact'><div class='label'>" + escapeHtml(label) + "</div><div class='value" + (tone ? " " + escapeAttr(tone) : "") + "'>" + escapeHtml(value || "0") + "</div></div>";
+    }
+
+    function importWarning(batch) {
+      const warnings = [];
+      if (batch.truncated) warnings.push("Выписка длинная: показана и обработана ограниченная часть строк.");
+      if (batch.warning) warnings.push(batch.warning);
+      if (!warnings.length) return "";
+      return "<div class='import-warning'>" + warnings.map(escapeHtml).join("<br>") + "</div>";
+    }
+
+    function importPreviewRows(items) {
+      if (!items.length) return "<div class='empty compact'>Строки для предпросмотра не найдены.</div>";
+      return items.map(function(item) {
+        const title = item.description || item.counterparty || item.raw_text || "Операция";
+        const category = [item.category, item.subcategory].filter(Boolean).join(" · ") || "Без категории";
+        const tone = item.kind === "income" ? "income" : "expense";
+        const reason = item.status_reason || importItemStatusLabel(item.status);
+        return "<div class='import-row status-" + escapeAttr(item.status || "draft") + "'>" +
+          "<div class='import-row-main'><div class='record-title'>" + escapeHtml(title) + "</div>" +
+          "<div class='record-meta'>" + escapeHtml([formatDate(item.local_date), category, reason].filter(Boolean).join(" · ")) + "</div></div>" +
+          "<div class='record-side'><div class='amount " + tone + "'>" + escapeHtml(money(item.amount_minor || 0)) + "</div>" +
+          "<div class='record-id'>" + escapeHtml(importItemStatusLabel(item.status)) + "</div></div>" +
+        "</div>";
+      }).join("");
+    }
+
+    function importActions(batch, importable) {
+      if (batch.status !== "draft") return "";
+      const confirmDisabled = importable <= 0 ? " disabled" : "";
+      return "<div class='import-actions'>" +
+        "<button class='primary' type='button' data-import-action='confirm' data-id='" + escapeAttr(batch.id) + "'" + confirmDisabled + ">Импортировать</button>" +
+        "<button class='danger' type='button' data-import-action='cancel' data-id='" + escapeAttr(batch.id) + "'>Отменить</button>" +
+      "</div>";
+    }
+
+    async function handleImportAction(event) {
+      const button = event.target.closest("button[data-import-action][data-id]");
+      if (!button) return;
+      const action = button.dataset.importAction;
+      const batchId = Number(button.dataset.id);
+      const batch = state.imports.find(function(item) { return Number(item.id) === batchId; }) || {};
+      const question = action === "confirm"
+        ? "Импортировать строки из черновика " + (batch.file_name || ("#" + batchId)) + "?"
+        : "Отменить черновик импорта " + (batch.file_name || ("#" + batchId)) + "?";
+      const ok = await confirmAction(question);
+      if (!ok) return;
+      const originalText = button.textContent;
+      button.disabled = true;
+      button.textContent = action === "confirm" ? "Импорт..." : "Отмена...";
+      try {
+        await api("/api/import-action", { batch_id: batchId, action: action });
+        notifySuccess();
+        await loadImports();
+        await loadOverview();
+      } catch (error) {
+        alert(error.message);
+      } finally {
+        button.disabled = false;
+        button.textContent = originalText;
       }
     }
 
@@ -990,6 +1162,48 @@ export const miniAppClientScript = `
       return status === "deleted" ? "Удалена" : "Активна";
     }
 
+    function importStatusLabel(status) {
+      const labels = {
+        draft: "Черновик",
+        confirmed: "Импортирован",
+        cancelled: "Отменен",
+        failed: "Ошибка"
+      };
+      return labels[status] || status || "Импорт";
+    }
+
+    function importItemStatusLabel(status) {
+      const labels = {
+        draft: "к записи",
+        imported: "записана",
+        duplicate: "дубль",
+        skipped: "пропуск",
+        cancelled: "отменена"
+      };
+      return labels[status] || status || "строка";
+    }
+
+    function importPeriod(batch) {
+      if (batch && batch.period_start && batch.period_end) return formatRange(batch.period_start, batch.period_end);
+      if (batch && batch.period_start) return formatDate(batch.period_start);
+      if (batch && batch.period_end) return formatDate(batch.period_end);
+      return "период не указан";
+    }
+
+    function formatDateTime(value) {
+      if (!value) return "";
+      const date = new Date(String(value).replace(" ", "T"));
+      if (Number.isNaN(date.getTime())) return String(value);
+      return new Intl.DateTimeFormat("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).format(date);
+    }
+
+    function notifySuccess() {
+      if (!tg || !tg.HapticFeedback || typeof tg.HapticFeedback.notificationOccurred !== "function") return;
+      try {
+        tg.HapticFeedback.notificationOccurred("success");
+      } catch (error) {}
+    }
+
     function normalizeRecordView(value) {
       return recordViews.includes(value) ? value : "feed";
     }
@@ -1042,7 +1256,7 @@ export const miniAppClientScript = `
       $("heroMeta").textContent = message;
       $("netFlow").textContent = "0 ₸";
       $("sideNote").textContent = "Данные защищены Telegram-проверкой.";
-      $("insightText").textContent = "Откройте Mini App из Telegram, чтобы увидеть личную аналитику.";
+      $("importAttention").hidden = true;
       $("metrics").innerHTML = "<div class='error'>"+ escapeHtml(message) + "</div>";
       $("dailyChart").innerHTML = "<div class='error'>" + escapeHtml(message) + "</div>";
       $("categoryTotals").innerHTML = "<div class='error'>" + escapeHtml(message) + "</div>";
@@ -1051,6 +1265,7 @@ export const miniAppClientScript = `
       $("familyHelpPanel").hidden = true;
       updateRecordsCanvasClass();
       $("recordsCanvas").innerHTML = "<div class='error'>" + escapeHtml(message) + "</div>";
+      $("importsCanvas").innerHTML = "<div class='error'>" + escapeHtml(message) + "</div>";
       $("debtsFull").innerHTML = "<div class='error'>" + escapeHtml(message) + "</div>";
     }
 

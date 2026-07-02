@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security report
+    url: https://github.com/Serouce/residualmap-bot/security/advisories/new
+    about: Please report vulnerabilities privately when private reporting is enabled.
+  - name: Deployment guide
+    url: https://github.com/Serouce/residualmap-bot/blob/main/docs/DEPLOYMENT.md
+    about: Start here if you are trying to self-host ResidualMap Bot.

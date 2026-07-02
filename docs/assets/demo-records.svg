@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540" role="img" aria-labelledby="title desc">
+  <title id="title">ResidualMap Bot synthetic records demo</title>
+  <desc id="desc">A synthetic records table for a self-hosted finance bot.</desc>
+  <rect width="960" height="540" fill="#f7f6f1"/>
+  <rect x="36" y="28" width="888" height="484" rx="10" fill="#ffffff" stroke="#d9d6ca"/>
+  <text x="68" y="76" font-family="Arial, sans-serif" font-size="30" font-weight="700" fill="#2f3028">Records</text>
+  <text x="68" y="108" font-family="Arial, sans-serif" font-size="16" fill="#6f6d62">Synthetic data only - no real financial records</text>
+
+  <rect x="68" y="140" width="824" height="42" rx="6" fill="#2f3028"/>
+  <text x="92" y="166" font-family="Arial, sans-serif" font-size="14" font-weight="700" fill="#ffffff">Date</text>
+  <text x="224" y="166" font-family="Arial, sans-serif" font-size="14" font-weight="700" fill="#ffffff">Type</text>
+  <text x="372" y="166" font-family="Arial, sans-serif" font-size="14" font-weight="700" fill="#ffffff">Description</text>
+  <text x="642" y="166" font-family="Arial, sans-serif" font-size="14" font-weight="700" fill="#ffffff">Amount</text>
+  <text x="790" y="166" font-family="Arial, sans-serif" font-size="14" font-weight="700" fill="#ffffff">Status</text>
+
+  <g font-family="Arial, sans-serif" font-size="15" fill="#2f3028">
+    <rect x="68" y="196" width="824" height="48" rx="6" fill="#fbfbf8" stroke="#e4e1d6"/>
+    <text x="92" y="226">2026-06-01</text>
+    <text x="224" y="226">expense</text>
+    <text x="372" y="226">taxi</text>
+    <text x="642" y="226">1,400 KZT</text>
+    <text x="790" y="226">active</text>
+
+    <rect x="68" y="256" width="824" height="48" rx="6" fill="#fbfbf8" stroke="#e4e1d6"/>
+    <text x="92" y="286">2026-06-01</text>
+    <text x="224" y="286">expense</text>
+    <text x="372" y="286">groceries</text>
+    <text x="642" y="286">6,200 KZT</text>
+    <text x="790" y="286">active</text>
+
+    <rect x="68" y="316" width="824" height="48" rx="6" fill="#f4f8f5" stroke="#d7e4da"/>
+    <text x="92" y="346">2026-06-02</text>
+    <text x="224" y="346">income</text>
+    <text x="372" y="346">salary</text>
+    <text x="642" y="346">350,000 KZT</text>
+    <text x="790" y="346">active</text>
+
+    <rect x="68" y="376" width="824" height="48" rx="6" fill="#fbfbf8" stroke="#e4e1d6"/>
+    <text x="92" y="406">2026-06-03</text>
+    <text x="224" y="406">loan_out</text>
+    <text x="372" y="406">Alex</text>
+    <text x="642" y="406">5,000 KZT</text>
+    <text x="790" y="406">active</text>
+
+    <rect x="68" y="436" width="824" height="48" rx="6" fill="#fff7f2" stroke="#ebd8c8"/>
+    <text x="92" y="466">2026-06-03</text>
+    <text x="224" y="466">repayment</text>
+    <text x="372" y="466">Alex returned</text>
+    <text x="642" y="466">2,000 KZT</text>
+    <text x="790" y="466">active</text>
+  </g>
+</svg>

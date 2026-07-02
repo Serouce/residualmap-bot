@@ -1,8 +1,12 @@
 import { miniAppHtml as renderMiniAppHtml } from "./mini-app.js";
 
 const TELEGRAM_API = "https://api.telegram.org/bot";
+const TELEGRAM_FILE_API = "https://api.telegram.org/file/bot";
 const ONLY_SUPPORTED_CURRENCY = "KZT";
 const UPDATE_PROCESSING_STALE_MS = 10 * 60 * 1000;
+const DEFAULT_STATEMENT_PDF_MAX_BYTES = 5 * 1024 * 1024;
+const HARD_STATEMENT_PDF_MAX_BYTES = 10 * 1024 * 1024;
+const MAX_IMPORT_ITEMS = 80;
 const FAMILY_HELP_EXPENSE_SQL = "kind = 'expense' AND ((category = 'Семья' AND subcategory = 'Помощь семье') OR category = 'Помощь семье')";
 const DEBT_KINDS = ["loan_out", "loan_repayment", "borrow_in", "borrow_repayment"];
 const DATE_MONTH_WORDS = [
@@ -19,6 +23,7 @@ const DATE_MONTH_WORDS = [
   "ноября",
   "декабря"
 ];
+const DATE_MONTH_INDEX = new Map(DATE_MONTH_WORDS.map((month, index) => [month, index + 1]));
 
 const SECURITY_HEADERS = {
   "X-Content-Type-Options": "nosniff",
@@ -66,7 +71,7 @@ const CATEGORY_RULES = [
   {
     category: "Транспорт",
     subcategory: "Такси",
-    patterns: [/такси/i, /яндекс/i, /uber/i, /bolt/i, /indrive/i, /индрайв/i]
+    patterns: [/такси/i, /yandex[\s._*-]*(go|taxi)/i, /яндекс\s*(go|го|такси)/i, /uber/i, /bolt/i, /indrive/i, /индрайв/i]
   },
   {
     category: "Транспорт",
@@ -150,6 +155,47 @@ const CATEGORY_RULES = [
     category: "Покупки",
     subcategory: "Прочее",
     patterns: [/маркет/i, /wildberries/i, /ozon/i, /kaspi/i, /купил/i, /купила/i]
+  }
+];
+
+const MERCHANT_CATEGORY_RULES = [
+  {
+    category: "Транспорт",
+    subcategory: "Такси",
+    patterns: [/\byandex[\s._*-]*(go|taxi)\b/i, /яндекс\s*(go|го|такси)/i]
+  },
+  {
+    category: "Связь",
+    subcategory: "Мобильная связь",
+    patterns: [/\bbeeline\b/i]
+  },
+  {
+    category: "Подписки",
+    subcategory: "Сервисы",
+    patterns: [/\bgoogle\s*[*\s._-]*google\s*one\b/i, /\bgoogle\s*one\b/i]
+  },
+  {
+    category: "Еда",
+    subcategory: "Доставка",
+    patterns: [
+      /\bwolt\b/i,
+      /\bglovo\b/i,
+      /\bjetpay\s*[*\s._-]*dodo\s*pizza\b/i,
+      /\bdodo\s*pizza\b/i,
+      /\bdodopizza\b/i,
+      /яндекс\s*еда/i,
+      /\byandex\s*eats\b/i
+    ]
+  },
+  {
+    category: "Еда",
+    subcategory: "Продукты",
+    patterns: [/\bmagnum\b/i, /\bsmall\b/i, /смолл/i]
+  },
+  {
+    category: "Здоровье",
+    subcategory: "Аптека",
+    patterns: [/аптек/i, /\bpharmacy\b/i, /\beuropharma\b/i]
   }
 ];
 
@@ -294,6 +340,54 @@ const INTENT_SCHEMA = {
   ]
 };
 
+const STATEMENT_IMPORT_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    source_name: { type: ["string", "null"] },
+    period_start: { type: ["string", "null"] },
+    period_end: { type: ["string", "null"] },
+    truncated: { type: "boolean" },
+    truncation_reason: { type: ["string", "null"] },
+    rows: {
+      type: "array",
+      maxItems: MAX_IMPORT_ITEMS,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          date: { type: ["string", "null"] },
+          direction: {
+            type: ["string", "null"],
+            enum: ["expense", "income", "transfer", "unknown", null]
+          },
+          amount: { type: ["number", "null"] },
+          amount_text: { type: ["string", "null"] },
+          currency: { type: ["string", "null"] },
+          operation: { type: ["string", "null"] },
+          description: { type: "string" },
+          merchant: { type: ["string", "null"] },
+          category_hint: { type: ["string", "null"] },
+          confidence: { type: "number", minimum: 0, maximum: 1 }
+        },
+        required: [
+          "date",
+          "direction",
+          "amount",
+          "amount_text",
+          "currency",
+          "operation",
+          "description",
+          "merchant",
+          "category_hint",
+          "confidence"
+        ]
+      }
+    }
+  },
+  required: ["source_name", "period_start", "period_end", "truncated", "truncation_reason", "rows"]
+};
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -334,6 +428,14 @@ export default {
 
     if (request.method === "POST" && url.pathname === "/api/transactions") {
       return handleMiniAppTransactions(request, env);
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/imports") {
+      return handleMiniAppImports(request, env);
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/import-action") {
+      return handleMiniAppImportAction(request, env);
     }
 
     if (request.method === "POST" && url.pathname === "/api/transaction-action") {
@@ -378,7 +480,7 @@ async function handleSetWebhook(request, url, env) {
     body: JSON.stringify({
       url: webhookUrl,
       secret_token: env.TELEGRAM_WEBHOOK_SECRET,
-      allowed_updates: ["message"],
+      allowed_updates: ["message", "callback_query"],
       drop_pending_updates: false
     })
   });
@@ -461,6 +563,11 @@ async function handleMiniAppData(request, env) {
   const recent = await listTransactions(env, user.id, "active", 20);
   const deleted = await listTransactions(env, user.id, "deleted", 10);
   const debts = await buildDebts(env, user.id);
+  const importBatches = await listImportBatches(env, user.id, 3);
+  const imports = [];
+  for (const batch of importBatches) {
+    imports.push(await hydrateImportBatch(env, user.id, batch));
+  }
 
   return json({
     ok: true,
@@ -476,7 +583,11 @@ async function handleMiniAppData(request, env) {
     summary,
     recent,
     deleted,
-    debts
+    debts,
+    imports_summary: {
+      draft_count: imports.filter((item) => item.status === "draft").length,
+      latest: imports[0] || null
+    }
   });
 }
 
@@ -516,6 +627,62 @@ async function handleMiniAppTransactions(request, env) {
     limit,
     items: result.items,
     categories: result.categories
+  });
+}
+
+async function handleMiniAppImports(request, env) {
+  const auth = await authenticateMiniAppRequest(request, env);
+  if (!auth.ok) return auth.response;
+
+  const { body, user } = auth;
+  const limit = normalizeLimit(body.limit, 10, 20);
+  const batches = await listImportBatches(env, user.id, limit);
+  const imports = [];
+  for (const batch of batches) {
+    imports.push(await hydrateImportBatch(env, user.id, batch));
+  }
+
+  return json({
+    ok: true,
+    limit,
+    draft_count: imports.filter((item) => item.status === "draft").length,
+    imports
+  });
+}
+
+async function handleMiniAppImportAction(request, env) {
+  const auth = await authenticateMiniAppRequest(request, env);
+  if (!auth.ok) return auth.response;
+
+  const { body, user } = auth;
+  const batchId = Number(body.batch_id);
+  const action = String(body.action || "");
+  if (!Number.isInteger(batchId) || batchId <= 0) {
+    return json({ ok: false, error: "Valid import batch id is required" }, { status: 400 });
+  }
+  if (action !== "confirm" && action !== "cancel") {
+    return json({ ok: false, error: "Action must be confirm or cancel" }, { status: 400 });
+  }
+
+  const result = action === "confirm"
+    ? await confirmImportBatch(env, user, null, batchId)
+    : await cancelImportBatch(env, user, batchId);
+  if (!result.ok) {
+    if (result.reason === "not_found") return json({ ok: false, error: "Import batch not found" }, { status: 404 });
+    return json({
+      ok: false,
+      error: "Import batch is not a draft",
+      status: result.batch?.status || "unknown"
+    }, { status: 409 });
+  }
+
+  const updated = await getImportBatch(env, user.id, batchId);
+  return json({
+    ok: true,
+    action,
+    imported_count: result.importedCount || 0,
+    new_duplicate_count: result.newDuplicateCount || 0,
+    import: updated ? await hydrateImportBatch(env, user.id, updated) : null
   });
 }
 
@@ -609,19 +776,25 @@ function requireSetupToken(request, env) {
 }
 
 async function handleTelegramUpdate(update, env) {
+  if (update.callback_query) {
+    await handleTelegramCallback(update, env);
+    return;
+  }
+
   const message = update.message;
   if (!message || !message.chat || !message.from) return;
 
   const chatId = String(message.chat.id);
   const telegramUserId = String(message.from.id);
   const text = (message.text || message.caption || "").trim();
+  const document = message.document || null;
 
-  if (!text) {
-    await sendMessage(env, chatId, "Пока я понимаю только текст. Голос и чеки добавим позже.");
+  if (!document && !text) {
+    await sendMessage(env, chatId, "Пока я понимаю только текст и PDF-выписки. Голос и чеки добавим позже.");
     return;
   }
 
-  if (text.length > 600) {
+  if (!document && text.length > 600) {
     await sendMessage(env, chatId, "Сообщение слишком длинное. Для записи расходов отправляй короткую фразу до 600 символов.");
     return;
   }
@@ -653,6 +826,18 @@ async function handleTelegramUpdate(update, env) {
 
     const user = await upsertUser(env, message.from);
 
+    if (document) {
+      await handleStatementDocument(env, {
+        chatId,
+        user,
+        updateId,
+        document,
+        caption: text
+      });
+      await completeUpdateProcessing(env, updateId);
+      return;
+    }
+
     if (text.startsWith("/")) {
       await handleCommand(env, { chatId, user, text });
       await completeUpdateProcessing(env, updateId);
@@ -669,6 +854,17 @@ async function handleTelegramUpdate(update, env) {
         originalText: text,
         useAi: true
       });
+      await completeUpdateProcessing(env, updateId);
+      return;
+    }
+
+    const dateResolution = resolveLocalDateInfo(
+      intent.date_text,
+      user.timezone || env.DEFAULT_TIMEZONE || "Asia/Qyzylorda",
+      new Date()
+    );
+    if (!dateResolution.ok) {
+      await sendMessage(env, chatId, formatDateResolutionError(dateResolution));
       await completeUpdateProcessing(env, updateId);
       return;
     }
@@ -719,7 +915,8 @@ async function handleTelegramUpdate(update, env) {
       user,
       chatId,
       intent: { ...intent, ...category },
-      rawText: text
+      rawText: text,
+      localDate: dateResolution.localDate
     });
 
     await sendMessage(env, chatId, formatTransactionCreated(inserted));
@@ -733,6 +930,65 @@ async function handleTelegramUpdate(update, env) {
       "Не получилось обработать сообщение. Я уже записал ошибку в лог Worker, можно будет спокойно разобраться."
     );
   }
+}
+
+async function handleTelegramCallback(update, env) {
+  const callback = update.callback_query;
+  if (!callback?.from) return;
+
+  const chatId = callback.message?.chat?.id ? String(callback.message.chat.id) : null;
+  const telegramUserId = String(callback.from.id);
+  const updateId = String(update.update_id ?? `callback:${callback.id}`);
+  const shouldProcess = await beginUpdateProcessing(env, updateId);
+  if (!shouldProcess) return;
+
+  try {
+    if (!isAllowed(env, telegramUserId)) {
+      await answerCallbackQuery(env, callback.id, "Нет доступа.");
+      if (chatId) {
+        await sendMessage(env, chatId, [
+          "Бот еще не разрешил доступ для этого аккаунта.",
+          `Ваш Telegram ID: <code>${escapeHtml(telegramUserId)}</code>`
+        ].join("\n"));
+      }
+      await completeUpdateProcessing(env, updateId);
+      return;
+    }
+
+    const action = parseImportCallbackData(callback.data);
+    if (!action || !chatId) {
+      await answerCallbackQuery(env, callback.id, "Не понял действие.");
+      await completeUpdateProcessing(env, updateId);
+      return;
+    }
+
+    const user = await upsertUser(env, callback.from);
+    if (action.action === "confirm") {
+      const result = await confirmImportBatch(env, user, chatId, action.batchId);
+      await answerCallbackQuery(env, callback.id, result.ok ? "Импорт обработан." : "Импорт не выполнен.");
+      await sendMessage(env, chatId, formatImportConfirmationResult(result));
+    } else {
+      const result = await cancelImportBatch(env, user, action.batchId);
+      await answerCallbackQuery(env, callback.id, result.ok ? "Черновик отменен." : "Не получилось отменить.");
+      await sendMessage(env, chatId, formatImportCancellationResult(result));
+    }
+    await completeUpdateProcessing(env, updateId);
+  } catch (error) {
+    console.error("callback update failed", error);
+    await failUpdateProcessing(env, updateId, error);
+    await answerCallbackQuery(env, callback.id, "Ошибка обработки.");
+    if (chatId) {
+      await sendMessage(env, chatId, "Не получилось обработать действие импорта. Ошибка записана в лог Worker.");
+    }
+  }
+}
+
+function parseImportCallbackData(data) {
+  const match = String(data || "").match(/^import:(confirm|cancel):(\d+)$/);
+  if (!match) return null;
+  const batchId = Number(match[2]);
+  if (!Number.isInteger(batchId) || batchId <= 0) return null;
+  return { action: match[1], batchId };
 }
 
 async function handleCommand(env, context) {
@@ -819,11 +1075,13 @@ function helpText(user) {
     "",
     "Примеры:",
     "<code>1400 такси</code>",
+    "<code>1 июля 1453 такси</code>",
     "<code>продукты 6200</code>",
     "<code>дал сестре 5000 в долг</code>",
     "<code>сестра вернула 2000</code>",
     "<code>зарплата 350000</code>",
     "<code>сколько потратил за неделю?</code>",
+    "PDF-выписку банка можно отправить файлом: я подготовлю черновик импорта.",
     "",
     "Команды:",
     "/app - открыть аналитику",
@@ -936,6 +1194,7 @@ function fallbackClassify(text) {
   }
 
   const category = inferCategory(lower, kind);
+  const dateText = extractDateText(lower);
   return {
     kind,
     amount,
@@ -944,7 +1203,7 @@ function fallbackClassify(text) {
     subcategory: category.subcategory,
     counterparty: inferCounterparty(lower),
     description: text,
-    date_text: lower.includes("вчера") ? "вчера" : null,
+    date_text: dateText,
     period: null,
     confidence: amount ? 0.65 : 0.2,
     needs_confirmation: !amount
@@ -986,6 +1245,9 @@ function normalizeCategory({ rawText, kind, category, subcategory }) {
   }
   if (kind === "transfer") return { category: "Переводы", subcategory: "Между счетами" };
 
+  const merchantCategory = matchMerchantCategory(rawText);
+  if (merchantCategory) return merchantCategory;
+
   const labelCanonical = canonicalCategoryFromLabels(category, subcategory);
   if (labelCanonical) return labelCanonical;
 
@@ -1002,6 +1264,17 @@ function normalizeCategory({ rawText, kind, category, subcategory }) {
     subcategory: limitText(cleanText(subcategory) || inferred.subcategory || "Без категории", 40)
   };
   return canonicalCategoryFromLabels(normalized.category, normalized.subcategory) || normalized;
+}
+
+function matchMerchantCategory(rawText) {
+  const text = String(rawText || "").normalize("NFKC");
+  if (!text.trim()) return null;
+  for (const rule of MERCHANT_CATEGORY_RULES) {
+    if (rule.patterns.some((pattern) => pattern.test(text))) {
+      return { category: rule.category, subcategory: rule.subcategory };
+    }
+  }
+  return null;
 }
 
 function canonicalCategoryFromLabels(category, subcategory) {
@@ -1172,10 +1445,10 @@ function inferCurrency(lower) {
   return null;
 }
 
-async function insertTransaction(env, { updateId, user, chatId, intent, rawText }) {
+async function insertTransaction(env, { updateId, user, chatId, intent, rawText, localDate: localDateOverride }) {
   const now = new Date();
   const timezone = user.timezone || env.DEFAULT_TIMEZONE || "Asia/Qyzylorda";
-  const localDate = resolveLocalDate(intent.date_text, timezone, now);
+  const localDate = localDateOverride || resolveLocalDate(intent.date_text, timezone, now);
   const amountMinor = toMinor(intent.amount);
   const nowIso = now.toISOString();
 
@@ -1236,6 +1509,20 @@ function formatTransactionCreated(row) {
   return lines.join("\n");
 }
 
+function formatDateResolutionError(result) {
+  const dateText = escapeHtml(result.dateText || "дату");
+  if (result.reason === "future") {
+    return [
+      `Не записал: дата <code>${dateText}</code> получается будущей (${escapeHtml(result.parsedDate)}).`,
+      "Укажи прошедшую дату, например: <code>1 июля 1453 такси</code>."
+    ].join("\n");
+  }
+  return [
+    `Не записал: не смог понять дату <code>${dateText}</code>.`,
+    "Поддерживаю: <code>вчера</code>, <code>позавчера</code>, <code>1 июля</code>, <code>01.07</code>, <code>01.07.2026</code>, <code>2026-07-01</code>."
+  ].join("\n");
+}
+
 async function sendMiniAppLink(env, chatId) {
   const appUrl = getMiniAppUrl(env);
   await sendMessage(env, chatId, "Открыть панель аналитики:", {
@@ -1253,7 +1540,808 @@ async function sendMiniAppLink(env, chatId) {
 }
 
 function getMiniAppUrl(env) {
-  return env.MINI_APP_URL || "https://residualmap-bot.residualmap.workers.dev/app";
+  return env.MINI_APP_URL || "https://your-worker.example/app";
+}
+
+async function handleStatementDocument(env, { chatId, user, updateId, document, caption }) {
+  const maxBytes = statementPdfMaxBytes(env);
+  if (!isPdfTelegramDocument(document)) {
+    await sendMessage(env, chatId, "Пока принимаю для импорта только PDF-выписки банка.");
+    return;
+  }
+
+  const declaredSize = Number(document.file_size || 0);
+  if (declaredSize > maxBytes) {
+    await sendMessage(env, chatId, `PDF слишком большой: максимум ${formatBytes(maxBytes)}.`);
+    return;
+  }
+
+  if (!env.OPENAI_API_KEY) {
+    await sendMessage(env, chatId, "Для разбора PDF-выписки нужен <code>OPENAI_API_KEY</code> в настройках Worker.");
+    return;
+  }
+
+  await sendMessage(env, chatId, "Получил PDF-выписку. Разбираю строки и готовлю черновик импорта.");
+  const downloaded = await downloadTelegramFile(env, document.file_id);
+  if (downloaded.bytes.byteLength > maxBytes) {
+    await sendMessage(env, chatId, `PDF слишком большой после скачивания: максимум ${formatBytes(maxBytes)}.`);
+    return;
+  }
+  if (!isPdfBytes(downloaded.bytes)) {
+    await sendMessage(env, chatId, "Файл выглядит не как PDF. Импорт остановлен до отправки в OpenAI.");
+    return;
+  }
+
+  const parsed = await extractStatementPdf(env, {
+    fileName: document.file_name || "statement.pdf",
+    bytes: downloaded.bytes,
+    caption
+  });
+  const draft = await createStatementImportDraft(env, {
+    user,
+    chatId,
+    updateId,
+    document,
+    filePath: downloaded.filePath,
+    bytes: downloaded.bytes,
+    parsed
+  });
+
+  await sendMessage(env, chatId, formatImportDraftSummary(draft), {
+    reply_markup: buildImportDraftKeyboard(env, draft.batch.id, draft.importableCount)
+  });
+}
+
+function isPdfTelegramDocument(document) {
+  const mime = String(document?.mime_type || "").toLowerCase();
+  const fileName = String(document?.file_name || "").toLowerCase();
+  return mime === "application/pdf" || fileName.endsWith(".pdf");
+}
+
+function isPdfBytes(bytes) {
+  if (!bytes || bytes.byteLength < 5) return false;
+  return bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46 && bytes[4] === 0x2d;
+}
+
+function statementPdfMaxBytes(env) {
+  const configured = Number(env.STATEMENT_PDF_MAX_BYTES || 0);
+  if (Number.isFinite(configured) && configured > 0) {
+    return Math.min(configured, HARD_STATEMENT_PDF_MAX_BYTES);
+  }
+  return DEFAULT_STATEMENT_PDF_MAX_BYTES;
+}
+
+function formatBytes(bytes) {
+  const mb = bytes / 1024 / 1024;
+  return `${mb.toFixed(mb >= 10 ? 0 : 1)} МБ`;
+}
+
+async function downloadTelegramFile(env, fileId) {
+  const infoResponse = await fetch(`${TELEGRAM_API}${env.TELEGRAM_BOT_TOKEN}/getFile`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ file_id: fileId })
+  });
+  const info = await infoResponse.json().catch(() => ({}));
+  if (!infoResponse.ok || info.ok !== true || !info.result?.file_path) {
+    throw new Error(`Telegram getFile failed ${infoResponse.status}`);
+  }
+
+  const filePath = info.result.file_path;
+  const fileResponse = await fetch(`${TELEGRAM_FILE_API}${env.TELEGRAM_BOT_TOKEN}/${filePath}`);
+  if (!fileResponse.ok) {
+    throw new Error(`Telegram file download failed ${fileResponse.status}`);
+  }
+  return {
+    filePath,
+    bytes: new Uint8Array(await fileResponse.arrayBuffer())
+  };
+}
+
+async function extractStatementPdf(env, { fileName, bytes, caption }) {
+  const system = [
+    "Ты извлекаешь операции из PDF-выписки банка для личного бюджета.",
+    "Верни только JSON по схеме. Не добавляй строки, которых нет в выписке.",
+    "Поле amount возвращай числом, а поле amount_text возвращай как исходную сумму из выписки вместе со знаком + или - и валютой, например '- 6 315,75 ₸'.",
+    "Знак суммы важнее названия операции: минус означает expense, плюс означает income. Слово 'Перевод' само по себе не означает transfer.",
+    "direction укажи как expense для списаний, income для поступлений, transfer только для уверенных переводов между своими счетами, unknown если непонятно.",
+    "Даты возвращай в формате YYYY-MM-DD. Если дату, сумму или направление нельзя понять уверенно, заполни null/unknown и снизь confidence.",
+    "Валюта проекта KZT. Если строка не KZT, укажи фактическую валюту.",
+    "Для operation верни текст из колонки операции: Пополнение, Перевод, Снятие, Покупка или аналогичный.",
+    `Если в выписке больше ${MAX_IMPORT_ITEMS} строк, верни первые ${MAX_IMPORT_ITEMS}, поставь truncated true и кратко объясни truncation_reason.`,
+    "Для Wolt, Glovo, DodoPizza, Яндекс Еда и похожих доставок используй category_hint 'Доставка'."
+  ].join("\n");
+  const userText = [
+    "Извлеки операции из PDF-выписки.",
+    caption ? `Комментарий пользователя: ${caption}` : "",
+    `Максимум строк: ${MAX_IMPORT_ITEMS}.`
+  ].filter(Boolean).join("\n");
+
+  return callOpenAIFileJson(env, {
+    model: env.OPENAI_MODEL_STATEMENT || env.OPENAI_MODEL_PARSE || "gpt-5.4-mini",
+    system,
+    user: userText,
+    fileName,
+    mimeType: "application/pdf",
+    bytes,
+    schemaName: "statement_import",
+    schema: STATEMENT_IMPORT_SCHEMA,
+    maxOutputTokens: 3500,
+    reasoningEffort: env.OPENAI_REASONING_EFFORT_STATEMENT || env.OPENAI_REASONING_EFFORT_PARSE || "low",
+    verbosity: "low"
+  });
+}
+
+async function createStatementImportDraft(env, { user, chatId, updateId, document, filePath, bytes, parsed }) {
+  const fileHash = await sha256Hex(bytes);
+  const now = new Date().toISOString();
+  const normalized = await normalizeStatementImportItems(env, user, parsed);
+  const counts = statementImportCounts(normalized);
+  const truncated = Boolean(parsed?.truncated) || (Array.isArray(parsed?.rows) && parsed.rows.length > MAX_IMPORT_ITEMS);
+  const truncationReason = limitText(cleanText(parsed?.truncation_reason), 240);
+  const batch = await env.DB.prepare(
+    `INSERT INTO import_batches (
+      user_id, chat_id, telegram_update_id, telegram_file_id, telegram_file_unique_id,
+      file_name, file_size, file_sha256, source_name, period_start, period_end,
+      status, item_count, import_count, duplicate_count, skipped_count,
+      expense_minor, income_minor, metadata_json, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, 0, ?, ?, ?, ?, ?, ?, ?)
+    RETURNING *`
+  )
+    .bind(
+      user.id,
+      chatId,
+      updateId,
+      document.file_id || null,
+      document.file_unique_id || null,
+      limitText(cleanText(document.file_name), 180) || "statement.pdf",
+      Number(document.file_size || bytes.byteLength) || bytes.byteLength,
+      fileHash,
+      limitText(cleanText(parsed.source_name), 120),
+      normalizeLocalDate(parsed.period_start),
+      normalizeLocalDate(parsed.period_end),
+      normalized.length,
+      counts.duplicateCount,
+      counts.skippedCount,
+      counts.expenseMinor,
+      counts.incomeMinor,
+      JSON.stringify({
+        file_path: filePath,
+        source_name: parsed.source_name || null,
+        period_start: parsed.period_start || null,
+        period_end: parsed.period_end || null,
+        truncated,
+        truncation_reason: truncationReason
+      }),
+      now,
+      now
+    )
+    .first();
+
+  const insertedItems = [];
+  for (const item of normalized) {
+    const inserted = await env.DB.prepare(
+      `INSERT INTO import_items (
+        batch_id, user_id, kind, amount_minor, currency, category, subcategory,
+        counterparty, description, raw_text, local_date, status, duplicate_transaction_id,
+        confidence, metadata_json, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      RETURNING *`
+    )
+      .bind(
+        batch.id,
+        user.id,
+        item.kind,
+        item.amountMinor,
+        item.currency,
+        item.category,
+        item.subcategory,
+        item.counterparty,
+        item.description,
+        item.rawText,
+        item.localDate,
+        item.status,
+        item.duplicateTransactionId,
+        item.confidence,
+        JSON.stringify(item.metadata),
+        now,
+        now
+      )
+      .first();
+    insertedItems.push(inserted);
+  }
+
+  await audit(env, user.id, null, "import_draft_create", {
+    import_batch_id: batch.id,
+    file_name: batch.file_name,
+    item_count: normalized.length,
+    importable_count: counts.importableCount,
+    duplicate_count: counts.duplicateCount,
+    skipped_count: counts.skippedCount,
+    file_sha256: fileHash
+  });
+
+  return {
+    batch,
+    items: insertedItems,
+    importableCount: counts.importableCount,
+    duplicateCount: counts.duplicateCount,
+    skippedCount: counts.skippedCount,
+    expenseMinor: counts.expenseMinor,
+    incomeMinor: counts.incomeMinor,
+    truncated,
+    truncationReason
+  };
+}
+
+async function normalizeStatementImportItems(env, user, parsed) {
+  const rows = Array.isArray(parsed?.rows) ? parsed.rows.slice(0, MAX_IMPORT_ITEMS) : [];
+  const items = [];
+  for (const [index, row] of rows.entries()) {
+    const item = await normalizeStatementImportItem(env, user, row, index);
+    items.push(item);
+  }
+  return items;
+}
+
+async function normalizeStatementImportItem(env, user, row, index) {
+  const amountInfo = normalizeStatementAmount(row);
+  const direction = normalizeStatementKind(row, amountInfo);
+  const amountMinor = amountInfo.amountMinor;
+  const currency = normalizeCurrency(row.currency || ONLY_SUPPORTED_CURRENCY);
+  const localDate = normalizeStatementLocalDate(row.date, user.timezone);
+  const description = limitText(cleanText(row.description) || cleanText(row.merchant) || "Операция из выписки", 180);
+  const counterparty = limitText(cleanText(row.merchant), 60);
+  const rawText = limitText([row.operation, row.description, row.merchant, row.category_hint].map(cleanText).filter(Boolean).join(" | ") || description, 600);
+  const confidence = Math.max(0, Math.min(1, Number(row.confidence ?? 0)));
+  const metadata = {
+    row_index: index,
+    source_date: row.date || null,
+    source_direction: row.direction || null,
+    source_amount_text: row.amount_text || null,
+    source_amount_sign: amountInfo.sign || null,
+    source_operation: row.operation || null,
+    category_hint: row.category_hint || null
+  };
+
+  let status = "draft";
+  let statusReason = null;
+  if (!localDate) {
+    status = "skipped";
+    statusReason = "invalid_date";
+  } else if (!amountMinor) {
+    status = "skipped";
+    statusReason = "invalid_amount";
+  } else if (!["expense", "income"].includes(direction)) {
+    status = "skipped";
+    statusReason = direction === "transfer" ? "transfer" : "unknown_direction";
+  } else if (currency !== ONLY_SUPPORTED_CURRENCY) {
+    status = "skipped";
+    statusReason = "unsupported_currency";
+  }
+
+  const categoryKind = ["expense", "income"].includes(direction) ? direction : "expense";
+  const merchantCategory = categoryKind === "expense"
+    ? matchMerchantCategory([row.operation, row.description, row.merchant].map(cleanText).filter(Boolean).join(" "))
+    : null;
+  const category = merchantCategory || await resolveCanonicalCategory(env, user.id, {
+    rawText,
+    kind: categoryKind,
+    category: cleanText(row.category_hint),
+    subcategory: null
+  });
+
+  let duplicateTransactionId = null;
+  if (status === "draft") {
+    const duplicate = await findDuplicateTransaction(env, {
+      userId: user.id,
+      localDate,
+      kind: direction,
+      amountMinor,
+      currency,
+      counterparty,
+      description,
+      rawText
+    });
+    if (duplicate) {
+      status = "duplicate";
+      statusReason = "matching_active_transaction";
+      duplicateTransactionId = duplicate.id;
+    }
+  }
+
+  return {
+    kind: ["expense", "income", "transfer"].includes(direction) ? direction : "unknown",
+    amountMinor,
+    currency,
+    category: category.category,
+    subcategory: category.subcategory,
+    counterparty,
+    description,
+    rawText,
+    localDate,
+    status,
+    duplicateTransactionId,
+    confidence,
+    metadata: { ...metadata, status_reason: statusReason }
+  };
+}
+
+function normalizeStatementAmount(row) {
+  const parsedText = parseStatementAmountText(row?.amount_text);
+  const numericAmount = Number(row?.amount);
+  let amountMinor = parsedText?.amountMinor ?? null;
+  let sign = parsedText?.sign ?? null;
+
+  if (!amountMinor && Number.isFinite(numericAmount) && Math.abs(numericAmount) > 0) {
+    amountMinor = toMinor(Math.abs(numericAmount));
+  }
+  if (!sign && Number.isFinite(numericAmount) && numericAmount < 0) {
+    sign = "-";
+  }
+
+  return { amountMinor, sign };
+}
+
+function parseStatementAmountText(value) {
+  const text = String(value || "").normalize("NFKC").replace(/\u2212/g, "-");
+  if (!text.trim()) return null;
+
+  const match = text.match(/([+-])?\s*([0-9][0-9\s\u00a0\u202f.']*(?:,[0-9]{1,2})?|[0-9]+(?:\.[0-9]{1,2})?)/);
+  if (!match) return null;
+
+  const sign = match[1] === "-" ? "-" : match[1] === "+" ? "+" : null;
+  const rawNumber = match[2].replace(/[\s\u00a0\u202f']/g, "");
+  let integerPart = rawNumber;
+  let decimalPart = "";
+
+  if (rawNumber.includes(",")) {
+    const commaIndex = rawNumber.lastIndexOf(",");
+    integerPart = rawNumber.slice(0, commaIndex).replace(/\./g, "");
+    decimalPart = rawNumber.slice(commaIndex + 1);
+  } else if (/\.\d{1,2}$/.test(rawNumber)) {
+    const dotIndex = rawNumber.lastIndexOf(".");
+    integerPart = rawNumber.slice(0, dotIndex).replace(/\./g, "");
+    decimalPart = rawNumber.slice(dotIndex + 1);
+  } else {
+    integerPart = rawNumber.replace(/\./g, "");
+  }
+
+  const units = Number(integerPart);
+  if (!Number.isInteger(units) || units < 0) return null;
+  const centsText = `${decimalPart || "0"}00`.slice(0, 2);
+  const cents = Number(centsText);
+  if (!Number.isInteger(cents) || cents < 0 || cents > 99) return null;
+
+  return { amountMinor: units * 100 + cents, sign };
+}
+
+function normalizeStatementKind(row, amountInfo) {
+  if (amountInfo?.sign === "-") return "expense";
+  if (amountInfo?.sign === "+") return "income";
+
+  const direction = normalizeStatementDirection(row?.direction);
+  if (direction === "transfer" && !isLikelyOwnAccountTransfer(row)) return "unknown";
+  return direction;
+}
+
+function isLikelyOwnAccountTransfer(row) {
+  const text = [row?.operation, row?.description, row?.merchant, row?.category_hint]
+    .map(cleanText)
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return /(между\s+(своими\s+)?счет|между\s+карт|собственн|на\s+свой|со\s+своего|с\s+моего|на\s+мой)/i.test(text);
+}
+
+function normalizeStatementDirection(direction) {
+  const value = String(direction || "").trim().toLowerCase();
+  if (value === "expense" || value === "income" || value === "transfer") return value;
+  return "unknown";
+}
+
+function normalizeStatementLocalDate(value, timezone) {
+  const normalized = normalizeLocalDate(value);
+  if (normalized) return normalized;
+  if (!value) return null;
+  const resolved = resolveLocalDateInfo(value, timezone || "Asia/Qyzylorda", new Date());
+  return resolved.ok ? resolved.localDate : null;
+}
+
+async function findDuplicateTransaction(env, { userId, localDate, kind, amountMinor, currency, counterparty, description, rawText }) {
+  if (!env?.DB) return null;
+  const rows = await env.DB.prepare(
+    `SELECT id, counterparty, description, raw_text
+    FROM transactions
+    WHERE user_id = ? AND status = 'active' AND local_date = ? AND kind = ? AND amount_minor = ? AND currency = ?
+    ORDER BY id DESC
+    LIMIT 20`
+  )
+    .bind(userId, localDate, kind, amountMinor, currency)
+    .all();
+
+  for (const row of rows.results || []) {
+    if (duplicateTextMatches({ counterparty, description, rawText }, row)) return row;
+  }
+  return null;
+}
+
+function duplicateTextMatches(left, right) {
+  const leftLabels = duplicateTextLabels(left);
+  const rightLabels = duplicateTextLabels({
+    counterparty: right.counterparty,
+    description: right.description,
+    rawText: right.raw_text
+  });
+  if (!leftLabels.length || !rightLabels.length) return false;
+  return leftLabels.some((leftLabel) =>
+    rightLabels.some((rightLabel) => leftLabel === rightLabel || leftLabel.includes(rightLabel) || rightLabel.includes(leftLabel))
+  );
+}
+
+function duplicateTextLabels({ counterparty, description, rawText }) {
+  return [...new Set([counterparty, description, rawText]
+    .map(normalizeCategoryLabel)
+    .filter((label) => label.length >= 2))];
+}
+
+function statementImportCounts(items) {
+  return items.reduce(
+    (counts, item) => {
+      if (item.status === "draft") {
+        counts.importableCount += 1;
+        if (item.kind === "expense") counts.expenseMinor += Number(item.amountMinor || 0);
+        if (item.kind === "income") counts.incomeMinor += Number(item.amountMinor || 0);
+      } else if (item.status === "duplicate") {
+        counts.duplicateCount += 1;
+      } else if (item.status === "skipped") {
+        counts.skippedCount += 1;
+      }
+      return counts;
+    },
+    { importableCount: 0, duplicateCount: 0, skippedCount: 0, expenseMinor: 0, incomeMinor: 0 }
+  );
+}
+
+function formatImportDraftSummary(draft) {
+  const batch = draft.batch;
+  const lines = [
+    "Черновик импорта PDF-выписки готов.",
+    "",
+    `ID: <code>${batch.id}</code> · Файл: <b>${escapeHtml(batch.file_name || "statement.pdf")}</b>`
+  ];
+  if (batch.source_name) lines.push(`Источник: <b>${escapeHtml(batch.source_name)}</b>`);
+  if (batch.period_start || batch.period_end) {
+    lines.push(`Период: <b>${escapeHtml([batch.period_start, batch.period_end].filter(Boolean).join(" — "))}</b>`);
+  }
+  lines.push("");
+  lines.push(`Строк: <b>${batch.item_count || 0}</b> · к импорту: <b>${draft.importableCount}</b>`);
+  if (draft.expenseMinor) lines.push(`Расходы к импорту: <b>${formatAmount(draft.expenseMinor, ONLY_SUPPORTED_CURRENCY)}</b>`);
+  if (draft.incomeMinor) lines.push(`Доходы к импорту: <b>${formatAmount(draft.incomeMinor, ONLY_SUPPORTED_CURRENCY)}</b>`);
+  if (draft.duplicateCount) lines.push(`Похожие дубли пропущены: <b>${draft.duplicateCount}</b>`);
+  if (draft.skippedCount) lines.push(`Строки без импорта: <b>${draft.skippedCount}</b>`);
+  if (draft.truncated) {
+    const reason = draft.truncationReason ? ` ${escapeHtml(draft.truncationReason)}` : "";
+    lines.push(`Внимание: выписка обрезана до <b>${MAX_IMPORT_ITEMS}</b> строк.${reason}`);
+  }
+  lines.push("");
+  lines.push(draft.importableCount > 0
+    ? "После подтверждения я добавлю только недублирующиеся строки в записи."
+    : "Нет строк, которые можно безопасно импортировать.");
+  return lines.join("\n");
+}
+
+function buildImportDraftKeyboard(env, batchId, importableCount) {
+  const row = [];
+  if (importableCount > 0) {
+    row.push({ text: "Импортировать", callback_data: `import:confirm:${batchId}` });
+  }
+  row.push({ text: "Отменить", callback_data: `import:cancel:${batchId}` });
+  const keyboard = [row];
+  if (env.MINI_APP_URL) {
+    keyboard.push([{ text: "Открыть панель", url: env.MINI_APP_URL }]);
+  }
+  return { inline_keyboard: keyboard };
+}
+
+async function listImportBatches(env, userId, limit) {
+  const rows = await env.DB.prepare(
+    `SELECT *
+    FROM import_batches
+    WHERE user_id = ?
+    ORDER BY CASE status WHEN 'draft' THEN 0 ELSE 1 END, created_at DESC, id DESC
+    LIMIT ?`
+  )
+    .bind(userId, limit)
+    .all();
+  return rows.results || [];
+}
+
+async function hydrateImportBatch(env, userId, batch) {
+  const [statusCounts, items] = await Promise.all([
+    importBatchStatusCounts(env, userId, batch.id),
+    listImportItemPreview(env, userId, batch.id, 8)
+  ]);
+  return formatImportBatchForApi(batch, statusCounts, items);
+}
+
+async function listImportItemPreview(env, userId, batchId, limit) {
+  const rows = await env.DB.prepare(
+    `SELECT id, kind, amount_minor, currency, category, subcategory, counterparty,
+      description, raw_text, local_date, status, duplicate_transaction_id, confidence,
+      metadata_json, created_at, updated_at
+    FROM import_items
+    WHERE user_id = ? AND batch_id = ?
+    ORDER BY CASE status
+      WHEN 'draft' THEN 0
+      WHEN 'duplicate' THEN 1
+      WHEN 'skipped' THEN 2
+      WHEN 'imported' THEN 3
+      ELSE 4
+    END, id
+    LIMIT ?`
+  )
+    .bind(userId, batchId, limit)
+    .all();
+  return rows.results || [];
+}
+
+function formatImportBatchForApi(batch, statusCounts, items) {
+  const metadata = parseJsonObject(batch.metadata_json) || {};
+  const truncated = Boolean(metadata.truncated);
+  const warning = truncated
+    ? `Выписка обрезана до ${MAX_IMPORT_ITEMS} строк${metadata.truncation_reason ? `: ${metadata.truncation_reason}` : "."}`
+    : null;
+  const importableCount = Number(statusCounts.draft || 0);
+  return {
+    id: batch.id,
+    status: batch.status,
+    file_name: batch.file_name,
+    source_name: batch.source_name,
+    period_start: batch.period_start,
+    period_end: batch.period_end,
+    item_count: Number(batch.item_count || 0),
+    importable_count: importableCount,
+    import_count: Number(batch.import_count || statusCounts.imported || 0),
+    duplicate_count: Number(statusCounts.duplicate ?? batch.duplicate_count ?? 0),
+    skipped_count: Number(statusCounts.skipped ?? batch.skipped_count ?? 0),
+    cancelled_count: Number(statusCounts.cancelled || 0),
+    expense_minor: Number(batch.expense_minor || 0),
+    income_minor: Number(batch.income_minor || 0),
+    created_at: batch.created_at,
+    updated_at: batch.updated_at,
+    confirmed_at: batch.confirmed_at,
+    cancelled_at: batch.cancelled_at,
+    warning,
+    truncated,
+    items: (items || []).map(formatImportItemForApi)
+  };
+}
+
+function formatImportItemForApi(item) {
+  const metadata = parseJsonObject(item.metadata_json) || {};
+  return {
+    id: item.id,
+    kind: item.kind,
+    amount_minor: item.amount_minor,
+    currency: item.currency,
+    category: item.category,
+    subcategory: item.subcategory,
+    counterparty: item.counterparty,
+    description: item.description,
+    raw_text: item.raw_text,
+    local_date: item.local_date,
+    status: item.status,
+    duplicate_transaction_id: item.duplicate_transaction_id,
+    confidence: item.confidence,
+    status_reason: metadata.status_reason || null
+  };
+}
+
+async function confirmImportBatch(env, user, chatId, batchId) {
+  const batch = await getImportBatch(env, user.id, batchId);
+  if (!batch) return { ok: false, reason: "not_found", batchId };
+  if (batch.status !== "draft") return { ok: false, reason: "not_draft", batch };
+
+  const rows = await env.DB.prepare(
+    `SELECT *
+    FROM import_items
+    WHERE user_id = ? AND batch_id = ? AND status = 'draft'
+    ORDER BY id`
+  )
+    .bind(user.id, batchId)
+    .all();
+
+  let importedCount = 0;
+  let newDuplicateCount = 0;
+  const now = new Date().toISOString();
+  for (const item of rows.results || []) {
+    const duplicate = await findDuplicateTransaction(env, {
+      userId: user.id,
+      localDate: item.local_date,
+      kind: item.kind,
+      amountMinor: item.amount_minor,
+      currency: item.currency,
+      counterparty: item.counterparty,
+      description: item.description,
+      rawText: item.raw_text
+    });
+    if (duplicate) {
+      await markImportItemDuplicate(env, user.id, item.id, duplicate.id, now);
+      newDuplicateCount += 1;
+      continue;
+    }
+
+    const inserted = await insertImportedTransaction(env, { user, chatId: chatId || batch.chat_id, batch, item, now });
+    await env.DB.prepare(
+      `UPDATE import_items
+      SET status = 'imported', transaction_id = ?, updated_at = ?
+      WHERE user_id = ? AND id = ? AND status = 'draft'`
+    )
+      .bind(inserted.id, now, user.id, item.id)
+      .run();
+    await audit(env, user.id, inserted.id, "import_transaction_create", {
+      import_batch_id: batch.id,
+      import_item_id: item.id,
+      file_name: batch.file_name
+    });
+    importedCount += 1;
+  }
+
+  const finalCounts = await importBatchStatusCounts(env, user.id, batchId);
+  await env.DB.prepare(
+    `UPDATE import_batches
+    SET status = 'confirmed', import_count = ?, duplicate_count = ?, skipped_count = ?,
+      confirmed_at = ?, updated_at = ?
+    WHERE user_id = ? AND id = ? AND status = 'draft'`
+  )
+    .bind(finalCounts.imported, finalCounts.duplicate, finalCounts.skipped, now, now, user.id, batchId)
+    .run();
+
+  await audit(env, user.id, null, "import_confirm", {
+    import_batch_id: batch.id,
+    imported_count: importedCount,
+    new_duplicate_count: newDuplicateCount
+  });
+
+  return { ok: true, batch, importedCount, newDuplicateCount };
+}
+
+async function importBatchStatusCounts(env, userId, batchId) {
+  const rows = await env.DB.prepare(
+    `SELECT status, COUNT(*) AS count
+    FROM import_items
+    WHERE user_id = ? AND batch_id = ?
+    GROUP BY status`
+  )
+    .bind(userId, batchId)
+    .all();
+  const counts = { draft: 0, imported: 0, duplicate: 0, skipped: 0, cancelled: 0 };
+  for (const row of rows.results || []) {
+    if (row.status === "draft") counts.draft = Number(row.count || 0);
+    if (row.status === "imported") counts.imported = Number(row.count || 0);
+    if (row.status === "duplicate") counts.duplicate = Number(row.count || 0);
+    if (row.status === "skipped") counts.skipped = Number(row.count || 0);
+    if (row.status === "cancelled") counts.cancelled = Number(row.count || 0);
+  }
+  return counts;
+}
+
+async function getImportBatch(env, userId, batchId) {
+  return env.DB.prepare(
+    `SELECT *
+    FROM import_batches
+    WHERE user_id = ? AND id = ?`
+  )
+    .bind(userId, batchId)
+    .first();
+}
+
+async function markImportItemDuplicate(env, userId, itemId, duplicateTransactionId, now) {
+  await env.DB.prepare(
+    `UPDATE import_items
+    SET status = 'duplicate', duplicate_transaction_id = ?, updated_at = ?
+    WHERE user_id = ? AND id = ? AND status = 'draft'`
+  )
+    .bind(duplicateTransactionId, now, userId, itemId)
+    .run();
+}
+
+async function insertImportedTransaction(env, { user, chatId, batch, item, now }) {
+  const telegramUpdateId = `import:${batch.id}:${item.id}`;
+  const existing = await env.DB.prepare(
+    `SELECT id
+    FROM transactions
+    WHERE user_id = ? AND telegram_update_id = ?`
+  )
+    .bind(user.id, telegramUpdateId)
+    .first();
+  if (existing) return existing;
+
+  const itemMetadata = parseJsonObject(item.metadata_json);
+  return env.DB.prepare(
+    `INSERT INTO transactions (
+      telegram_update_id, user_id, chat_id, kind, amount_minor, currency,
+      category, subcategory, counterparty, description, raw_text,
+      occurred_at, local_date, metadata_json, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    RETURNING id`
+  )
+    .bind(
+      telegramUpdateId,
+      user.id,
+      chatId,
+      item.kind,
+      item.amount_minor,
+      item.currency || user.currency,
+      item.category,
+      item.subcategory,
+      item.counterparty,
+      item.description,
+      item.raw_text,
+      now,
+      item.local_date,
+      JSON.stringify({
+        source: "statement_import",
+        import_batch_id: batch.id,
+        import_item_id: item.id,
+        statement_file_name: batch.file_name,
+        confidence: item.confidence,
+        row: itemMetadata
+      }),
+      now,
+      now
+    )
+    .first();
+}
+
+async function cancelImportBatch(env, user, batchId) {
+  const batch = await getImportBatch(env, user.id, batchId);
+  if (!batch) return { ok: false, reason: "not_found", batchId };
+  if (batch.status !== "draft") return { ok: false, reason: "not_draft", batch };
+
+  const now = new Date().toISOString();
+  const result = await env.DB.prepare(
+    `UPDATE import_batches
+    SET status = 'cancelled', cancelled_at = ?, updated_at = ?
+    WHERE user_id = ? AND id = ? AND status = 'draft'`
+  )
+    .bind(now, now, user.id, batchId)
+    .run();
+  if ((result.meta?.changes ?? 0) === 0) return { ok: false, reason: "not_draft", batch };
+
+  await env.DB.prepare(
+    `UPDATE import_items
+    SET status = 'cancelled', updated_at = ?
+    WHERE user_id = ? AND batch_id = ? AND status = 'draft'`
+  )
+    .bind(now, user.id, batchId)
+    .run();
+  await audit(env, user.id, null, "import_cancel", { import_batch_id: batchId });
+  return { ok: true, batch };
+}
+
+function formatImportConfirmationResult(result) {
+  if (!result.ok) {
+    if (result.reason === "not_found") return "Черновик импорта не найден.";
+    return `Этот импорт уже не в статусе черновика: <code>${escapeHtml(result.batch?.status || "unknown")}</code>.`;
+  }
+  const lines = [
+    `Импорт <code>${result.batch.id}</code> подтвержден.`,
+    `Добавлено записей: <b>${result.importedCount}</b>`
+  ];
+  if (result.newDuplicateCount) {
+    lines.push(`Новые дубли пропущены: <b>${result.newDuplicateCount}</b>`);
+  }
+  return lines.join("\n");
+}
+
+function formatImportCancellationResult(result) {
+  if (!result.ok) {
+    if (result.reason === "not_found") return "Черновик импорта не найден.";
+    return `Этот импорт уже не в статусе черновика: <code>${escapeHtml(result.batch?.status || "unknown")}</code>.`;
+  }
+  return `Черновик импорта <code>${result.batch.id}</code> отменен. Записи в БД не добавлены.`;
 }
 
 async function handleAnalytics(env, { chatId, user, period, originalText, useAi }) {
@@ -2042,6 +3130,53 @@ async function callOpenAIJson(env, { model, system, user, schemaName, schema, ma
   return JSON.parse(extractOutputText(data));
 }
 
+async function callOpenAIFileJson(env, { model, system, user, fileName, mimeType, bytes, schemaName, schema, maxOutputTokens, reasoningEffort, verbosity }) {
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${env.OPENAI_API_KEY}`
+    },
+    body: JSON.stringify({
+      model,
+      input: [
+        { role: "system", content: system },
+        {
+          role: "user",
+          content: [
+            {
+              type: "input_file",
+              filename: fileName,
+              file_data: `data:${mimeType};base64,${bytesToBase64(bytes)}`
+            },
+            { type: "input_text", text: user }
+          ]
+        }
+      ],
+      text: {
+        verbosity: verbosity || "low",
+        format: {
+          type: "json_schema",
+          name: schemaName,
+          schema,
+          strict: true
+        }
+      },
+      reasoning: { effort: reasoningEffort || "low" },
+      max_output_tokens: maxOutputTokens,
+      store: false
+    })
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`OpenAI file error ${response.status}: ${body.slice(0, 500)}`);
+  }
+
+  const data = await response.json();
+  return JSON.parse(extractOutputText(data));
+}
+
 function extractOutputText(data) {
   if (typeof data.output_text === "string") return data.output_text;
   for (const item of data.output || []) {
@@ -2051,6 +3186,31 @@ function extractOutputText(data) {
     }
   }
   throw new Error("No output text in OpenAI response");
+}
+
+function parseJsonObject(value) {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+async function sha256Hex(bytes) {
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function bytesToBase64(bytes) {
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+  }
+  if (typeof btoa === "function") return btoa(binary);
+  return Buffer.from(bytes).toString("base64");
 }
 
 async function sendMessage(env, chatId, text, options = {}) {
@@ -2070,6 +3230,22 @@ async function sendMessage(env, chatId, text, options = {}) {
     if (!response.ok) {
       console.error("Telegram sendMessage failed", response.status, await response.text());
     }
+  }
+}
+
+async function answerCallbackQuery(env, callbackQueryId, text) {
+  if (!callbackQueryId) return;
+  const response = await fetch(`${TELEGRAM_API}${env.TELEGRAM_BOT_TOKEN}/answerCallbackQuery`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      callback_query_id: callbackQueryId,
+      text: limitText(text, 180),
+      show_alert: false
+    })
+  });
+  if (!response.ok) {
+    console.error("Telegram answerCallbackQuery failed", response.status, await response.text());
   }
 }
 
@@ -2180,11 +3356,104 @@ function monthLabelYmd(ymd) {
 }
 
 function resolveLocalDate(dateText, timezone, now) {
+  return resolveLocalDateInfo(dateText, timezone, now).localDate;
+}
+
+function resolveLocalDateInfo(dateText, timezone, now) {
   const today = getLocalYmd(now, timezone);
-  const lower = String(dateText || "").toLowerCase();
-  if (lower.includes("позавчера")) return addDaysYmd(today, -2);
-  if (lower.includes("вчера")) return addDaysYmd(today, -1);
-  return today;
+  const lower = String(dateText || "").toLowerCase().replaceAll("ё", "е").trim();
+  if (!lower) return { ok: true, localDate: today, explicit: false };
+  if (lower.includes("позавчера")) return { ok: true, localDate: addDaysYmd(today, -2), explicit: true };
+  if (lower.includes("вчера")) return { ok: true, localDate: addDaysYmd(today, -1), explicit: true };
+  if (lower.includes("сегодня")) return { ok: true, localDate: today, explicit: true };
+
+  const parsed = parseExplicitLocalDate(lower, today);
+  if (parsed.error) {
+    return { ok: false, localDate: today, explicit: true, reason: "invalid", dateText };
+  }
+  if (!parsed.localDate) {
+    return { ok: false, localDate: today, explicit: true, reason: "unsupported", dateText };
+  }
+  if (parsed.localDate > today) {
+    return { ok: false, localDate: today, explicit: true, reason: "future", dateText, parsedDate: parsed.localDate };
+  }
+  return { ok: true, localDate: parsed.localDate, explicit: true };
+}
+
+function parseExplicitLocalDate(lower, today) {
+  const iso = lower.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
+  if (iso) return buildLocalDate(Number(iso[3]), Number(iso[2]), Number(iso[1]), today, true);
+
+  const monthPattern = DATE_MONTH_WORDS.join("|");
+  const monthMatch = lower.match(new RegExp(`(?:^|[^\\p{L}\\p{N}])(\\d{1,2})\\s+(${monthPattern})(?:\\s+((?:19|20)\\d{2}))?`, "iu"));
+  if (monthMatch) {
+    return buildLocalDate(
+      Number(monthMatch[1]),
+      DATE_MONTH_INDEX.get(monthMatch[2].toLowerCase().replaceAll("ё", "е")),
+      monthMatch[3] ? normalizeDateYear(monthMatch[3]) : null,
+      today,
+      Boolean(monthMatch[3])
+    );
+  }
+
+  const dotted = lower.match(/\b(\d{1,2})[./](\d{1,2})(?:[./](\d{2,4}))?\b/);
+  if (dotted) {
+    return buildLocalDate(
+      Number(dotted[1]),
+      Number(dotted[2]),
+      dotted[3] ? normalizeDateYear(dotted[3]) : null,
+      today,
+      Boolean(dotted[3])
+    );
+  }
+
+  return { localDate: null };
+}
+
+function buildLocalDate(day, month, year, today, explicitYear) {
+  if (!Number.isInteger(day) || !Number.isInteger(month) || day < 1 || day > 31 || month < 1 || month > 12) {
+    return { error: true };
+  }
+  const candidateYear = explicitYear ? year : Number(today.slice(0, 4));
+  if (!Number.isInteger(candidateYear) || candidateYear < 1900 || candidateYear > 2100) return { error: true };
+
+  let localDate = formatYmd(candidateYear, month, day);
+  if (!normalizeLocalDate(localDate)) return { error: true };
+  if (!explicitYear && localDate > today) {
+    localDate = formatYmd(candidateYear - 1, month, day);
+    if (!normalizeLocalDate(localDate)) return { error: true };
+  }
+  return { localDate };
+}
+
+function normalizeDateYear(value) {
+  const year = Number(value);
+  if (!Number.isInteger(year)) return null;
+  return year < 100 ? 2000 + year : year;
+}
+
+function formatYmd(year, month, day) {
+  return [
+    String(year).padStart(4, "0"),
+    String(month).padStart(2, "0"),
+    String(day).padStart(2, "0")
+  ].join("-");
+}
+
+function extractDateText(text) {
+  const source = String(text || "").toLowerCase().replaceAll("ё", "е");
+  if (source.includes("позавчера")) return "позавчера";
+  if (source.includes("вчера")) return "вчера";
+  if (source.includes("сегодня")) return "сегодня";
+
+  const monthPattern = DATE_MONTH_WORDS.join("|");
+  const monthMatch = source.match(new RegExp(`(?:^|[^\\p{L}\\p{N}])(\\d{1,2})\\s+(${monthPattern})(?:\\s+((?:19|20)\\d{2}))?`, "iu"));
+  if (monthMatch) return [monthMatch[1], monthMatch[2], monthMatch[3]].filter(Boolean).join(" ");
+  const iso = source.match(/\b\d{4}-\d{2}-\d{2}\b/);
+  if (iso) return iso[0];
+  const dotted = source.match(/\b\d{1,2}[./]\d{1,2}(?:[./]\d{2,4})?\b/);
+  if (dotted) return dotted[0];
+  return null;
 }
 
 function getLocalYmd(date, timezone) {
@@ -2222,6 +3491,7 @@ function extractAmount(text) {
     const numberEnd = numberStart + match[1].length + (match[2] ? match[0].slice(match[0].search(/\d/) + match[1].length).indexOf(match[2]) + match[2].length : 0);
     const before = source.slice(Math.max(0, numberStart - 18), numberStart);
     const after = source.slice(numberEnd, numberEnd + 24);
+    if (isNumericDateAt(source, numberStart)) continue;
     if (isDateOrPeriodNumber(before, after)) continue;
     const normalized = match[1].replace(/[\s.]/g, "");
     const decimal = match[2] ? `.${match[2]}` : "";
@@ -2241,6 +3511,27 @@ function isDateOrPeriodNumber(before, after) {
   }
   if (/\b(за|с|от)\s*$/i.test(head) && DATE_MONTH_WORDS.includes(nextWord)) return true;
   return false;
+}
+
+function isNumericDateAt(source, numberStart) {
+  const numericDates = source.matchAll(/\d{4}-\d{2}-\d{2}|\d{1,2}[./]\d{1,2}(?:[./]\d{2,4})?/g);
+  for (const match of numericDates) {
+    const start = match.index;
+    const end = start + match[0].length;
+    if (numberStart < start || numberStart >= end) continue;
+    if (isValidNumericDateToken(match[0])) return true;
+  }
+  return false;
+}
+
+function isValidNumericDateToken(token) {
+  const iso = token.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (iso) return Boolean(normalizeLocalDate(`${iso[1]}-${iso[2]}-${iso[3]}`));
+
+  const dotted = token.match(/^(\d{1,2})[./](\d{1,2})(?:[./](\d{2,4}))?$/);
+  if (!dotted) return false;
+  const year = dotted[3] ? normalizeDateYear(dotted[3]) : 2000;
+  return Boolean(buildLocalDate(Number(dotted[1]), Number(dotted[2]), year, "2000-12-31", true).localDate);
 }
 
 function toMinor(amount) {
@@ -2431,12 +3722,25 @@ function timingSafeEqualString(a, b) {
 
 export const __testables = {
   extractAmount,
+  extractDateText,
   fallbackClassify,
   mergeCanonicalCategoryRows,
+  matchMerchantCategory,
   normalizeIntent,
+  normalizeStatementImportItem,
+  normalizeStatementKind,
+  parseStatementAmountText,
+  resolveLocalDate,
+  resolveLocalDateInfo,
   resolveCanonicalCategory,
   normalizeCurrency,
   isSupportedCurrency,
+  isPdfTelegramDocument,
+  statementPdfMaxBytes,
+  escapeHtml,
+  csvCell,
+  softDelete,
+  restoreTransaction,
   bearerToken,
   timingSafeEqualString
 };

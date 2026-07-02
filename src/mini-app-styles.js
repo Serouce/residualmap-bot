@@ -98,8 +98,7 @@ export const miniAppStyles = `
       margin: 0;
       min-height: 100vh;
       color: var(--text);
-      background:
-        linear-gradient(180deg, color-mix(in srgb, var(--surface-soft) 66%, var(--bg)) 0%, var(--bg) 38%, color-mix(in srgb, var(--accent) 4%, var(--bg)) 100%);
+      background: var(--bg);
       font: 16px/1.45 ui-sans-serif, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Arial, sans-serif;
       font-variant-numeric: tabular-nums;
       text-rendering: optimizeLegibility;
@@ -142,8 +141,8 @@ export const miniAppStyles = `
 
     h1 {
       margin-top: 8px;
-      font-size: 44px;
-      line-height: .98;
+      font-size: 34px;
+      line-height: 1.05;
       font-weight: 790;
       letter-spacing: 0;
       overflow-wrap: anywhere;
@@ -309,7 +308,7 @@ export const miniAppStyles = `
     }
 
     .tabs {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: repeat(4, minmax(0, 1fr));
     }
 
     .quick-filters {
@@ -425,7 +424,7 @@ export const miniAppStyles = `
 
     .panel,
     .hero-card {
-      padding: 18px;
+      padding: 16px;
     }
 
     .primary-panel {
@@ -487,23 +486,43 @@ export const miniAppStyles = `
       overflow-wrap: anywhere;
     }
 
-    .insight-card {
-      margin-top: 14px;
-      padding: 12px 13px;
-      border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
-      border-radius: var(--radius);
-      background: color-mix(in srgb, var(--surface-raised) 66%, var(--accent) 10%);
-      box-shadow: inset 0 1px 0 color-mix(in srgb, var(--surface-raised) 72%, transparent);
-      color: var(--text);
-      font-size: 14px;
-      line-height: 1.38;
-    }
-
     .metric-grid {
       display: grid;
       grid-template-columns: repeat(4, minmax(0, 1fr));
       gap: 10px;
       margin-bottom: 10px;
+    }
+
+    .notice-strip {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 10px;
+      padding: 12px 13px;
+      border: 1px solid color-mix(in srgb, var(--debt) 34%, var(--line));
+      border-radius: var(--radius);
+      background: color-mix(in srgb, var(--debt) 10%, var(--surface));
+      box-shadow: var(--shadow-soft);
+    }
+
+    .notice-title {
+      color: var(--text);
+      font-size: 15px;
+      font-weight: 790;
+    }
+
+    .notice-meta {
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 680;
+      overflow-wrap: anywhere;
+    }
+
+    .notice-strip .secondary {
+      flex: 0 0 auto;
+      padding: 0 13px;
     }
 
     .metric-card {
@@ -774,6 +793,26 @@ export const miniAppStyles = `
       overflow: hidden;
     }
 
+    .import-panel {
+      overflow: hidden;
+    }
+
+    .import-toolbar {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .import-toolbar .secondary {
+      padding: 0 13px;
+    }
+
+    .imports-canvas {
+      display: grid;
+      gap: 10px;
+    }
+
     .records-toolbar {
       display: grid;
       grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr) auto;
@@ -853,6 +892,7 @@ export const miniAppStyles = `
     }
 
     .record-card,
+    .import-card,
     .date-group {
       border: 1px solid color-mix(in srgb, var(--line) 86%, transparent);
       border-radius: var(--radius);
@@ -869,7 +909,26 @@ export const miniAppStyles = `
       transition: border-color .16s ease, background-color .16s ease, transform .16s ease;
     }
 
+    .import-card {
+      display: grid;
+      gap: 12px;
+      padding: 13px;
+    }
+
+    .import-card.import-draft {
+      border-color: color-mix(in srgb, var(--debt) 34%, var(--line));
+    }
+
+    .import-card.import-confirmed {
+      border-color: color-mix(in srgb, var(--income) 30%, var(--line));
+    }
+
+    .import-card.import-cancelled {
+      opacity: .84;
+    }
+
     .record-card:hover,
+    .import-card:hover,
     .ledger-table tbody tr:hover,
     .group-row:hover {
       border-color: color-mix(in srgb, var(--accent) 24%, var(--line));
@@ -931,6 +990,139 @@ export const miniAppStyles = `
       color: var(--muted);
       font-size: 12px;
       font-weight: 720;
+    }
+
+    .import-card-head,
+    .import-row,
+    .import-actions {
+      display: grid;
+      gap: 10px;
+    }
+
+    .import-card-head {
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: start;
+    }
+
+    .import-title-wrap {
+      min-width: 0;
+    }
+
+    .import-title {
+      color: var(--text);
+      font-size: 16px;
+      font-weight: 800;
+      overflow-wrap: anywhere;
+    }
+
+    .import-subtitle {
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 12.5px;
+      font-weight: 680;
+      overflow-wrap: anywhere;
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 28px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      border: 1px solid color-mix(in srgb, var(--line) 78%, transparent);
+      background: color-mix(in srgb, var(--surface-soft) 68%, var(--surface));
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .status-draft {
+      border-color: color-mix(in srgb, var(--debt) 34%, var(--line));
+      background: color-mix(in srgb, var(--debt) 12%, var(--surface));
+      color: var(--debt);
+    }
+
+    .status-confirmed,
+    .status-imported {
+      border-color: color-mix(in srgb, var(--income) 34%, var(--line));
+      background: color-mix(in srgb, var(--income) 12%, var(--surface));
+      color: var(--income);
+    }
+
+    .status-cancelled,
+    .status-skipped,
+    .status-duplicate {
+      border-color: color-mix(in srgb, var(--muted) 30%, var(--line));
+      background: color-mix(in srgb, var(--muted) 10%, var(--surface));
+      color: var(--muted);
+    }
+
+    .import-facts {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .import-fact {
+      min-width: 0;
+      padding: 9px;
+      border: 1px solid color-mix(in srgb, var(--line) 78%, transparent);
+      border-radius: var(--radius);
+      background: color-mix(in srgb, var(--surface-soft) 52%, var(--surface));
+    }
+
+    .import-fact .value {
+      margin-top: 2px;
+      color: var(--text);
+      font-size: 14px;
+      font-weight: 800;
+      overflow-wrap: anywhere;
+    }
+
+    .import-warning {
+      padding: 10px 11px;
+      border: 1px solid color-mix(in srgb, var(--debt) 32%, var(--line));
+      border-radius: var(--radius);
+      background: color-mix(in srgb, var(--debt) 10%, var(--surface));
+      color: var(--debt);
+      font-size: 13px;
+      font-weight: 720;
+      overflow-wrap: anywhere;
+    }
+
+    .import-preview {
+      display: grid;
+      gap: 0;
+      overflow: hidden;
+      border: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
+      border-radius: var(--radius);
+      background: color-mix(in srgb, var(--surface-tint) 72%, var(--surface));
+    }
+
+    .import-row {
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: start;
+      padding: 10px 11px;
+      border-top: 1px solid var(--line);
+    }
+
+    .import-row:first-child {
+      border-top: 0;
+    }
+
+    .import-row.status-duplicate,
+    .import-row.status-skipped {
+      background: color-mix(in srgb, var(--muted) 7%, transparent);
+    }
+
+    .import-row-main {
+      min-width: 0;
+    }
+
+    .import-actions {
+      grid-template-columns: 1fr 1fr;
     }
 
     .table-scroll {
@@ -1074,6 +1266,13 @@ export const miniAppStyles = `
       font-weight: 680;
     }
 
+    .empty.compact {
+      min-height: 72px;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+    }
+
     .error {
       color: var(--expense);
     }
@@ -1191,7 +1390,7 @@ export const miniAppStyles = `
       display: grid;
       grid-template-columns: 1fr 1fr 1fr;
       gap: 8px;
-      padding-top: 8px;
+      padding: 8px 0 calc(8px + env(safe-area-inset-bottom));
       background: var(--surface);
     }
 
@@ -1258,6 +1457,18 @@ export const miniAppStyles = `
       .density-button {
         width: 100%;
       }
+
+      .import-facts {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .import-toolbar {
+        justify-content: stretch;
+      }
+
+      .import-toolbar .secondary {
+        width: 100%;
+      }
     }
 
     @media (max-width: 520px) {
@@ -1318,7 +1529,7 @@ export const miniAppStyles = `
       }
 
       h1 {
-        font-size: 38px;
+        font-size: 32px;
       }
 
       h2 {
@@ -1358,6 +1569,29 @@ export const miniAppStyles = `
       .edit-form,
       .actions,
       .actions.editing {
+        grid-template-columns: 1fr;
+      }
+
+      .notice-strip,
+      .import-card-head,
+      .import-row,
+      .import-actions {
+        grid-template-columns: 1fr;
+      }
+
+      .notice-strip {
+        display: grid;
+      }
+
+      .notice-strip .secondary {
+        width: 100%;
+      }
+
+      .status-badge {
+        justify-self: start;
+      }
+
+      .import-facts {
         grid-template-columns: 1fr;
       }
 

@@ -36,9 +36,10 @@ ${miniAppStyles}
       </nav>
 
       <nav class="tabs" id="tabs" role="tablist" aria-label="Разделы Mini App">
-        <button data-tab="overview" class="active" type="button" role="tab" aria-selected="true" aria-controls="view-overview">Обзор</button>
-        <button data-tab="records" type="button" role="tab" aria-selected="false" aria-controls="view-records">Записи</button>
-        <button data-tab="debts" type="button" role="tab" aria-selected="false" aria-controls="view-debts">Долги</button>
+        <button id="overview-tab" data-tab="overview" class="active" type="button" role="tab" aria-selected="true" aria-controls="view-overview">Обзор</button>
+        <button id="records-tab" data-tab="records" type="button" role="tab" aria-selected="false" aria-controls="view-records">Записи</button>
+        <button id="import-tab" data-tab="import" type="button" role="tab" aria-selected="false" aria-controls="view-import">Импорт</button>
+        <button id="debts-tab" data-tab="debts" type="button" role="tab" aria-selected="false" aria-controls="view-debts">Долги</button>
       </nav>
     </header>
 
@@ -48,7 +49,6 @@ ${miniAppStyles}
           <div class="eyebrow" id="periodName">Месяц</div>
           <h1 id="heroSpend">0 ₸</h1>
           <div class="hero-meta" id="heroMeta">Расходы за выбранный период</div>
-          <div class="insight-card" id="insightText">Собираю главную финансовую картину.</div>
         </article>
         <aside class="hero-card balance-panel">
           <div class="side-label">Баланс периода</div>
@@ -63,6 +63,8 @@ ${miniAppStyles}
         <div class="skeleton"></div>
         <div class="skeleton"></div>
       </section>
+
+      <section class="notice-strip" id="importAttention" hidden></section>
 
       <section class="dashboard-grid">
         <section class="panel wide">
@@ -128,7 +130,7 @@ ${miniAppStyles}
       </section>
     </section>
 
-    <section class="view" id="view-records" role="tabpanel" aria-label="Записи">
+    <section class="view" id="view-records" role="tabpanel" aria-labelledby="records-tab">
       <section class="panel records-panel">
         <div class="panel-head records-head">
           <div>
@@ -184,7 +186,28 @@ ${miniAppStyles}
       </section>
     </section>
 
-    <section class="view" id="view-debts" role="tabpanel" aria-label="Долги">
+    <section class="view" id="view-import" role="tabpanel" aria-labelledby="import-tab">
+      <section class="panel import-panel">
+        <div class="panel-head records-head">
+          <div>
+            <h2>Импорт</h2>
+            <p class="caption">Черновики PDF-выписок, дубли и строки перед записью</p>
+          </div>
+          <span class="pill" id="importCount">0 импортов</span>
+        </div>
+
+        <div class="import-toolbar">
+          <button class="secondary" id="refreshImports" type="button">Обновить импорт</button>
+        </div>
+
+        <div class="imports-canvas" id="importsCanvas" aria-live="polite">
+          <div class="skeleton"></div>
+          <div class="skeleton"></div>
+        </div>
+      </section>
+    </section>
+
+    <section class="view" id="view-debts" role="tabpanel" aria-labelledby="debts-tab">
       <section class="panel">
         <div class="panel-head">
           <div>

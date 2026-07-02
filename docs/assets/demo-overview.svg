@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540" role="img" aria-labelledby="title desc">
+  <title id="title">ResidualMap Bot synthetic overview demo</title>
+  <desc id="desc">A synthetic overview dashboard for a self-hosted finance bot.</desc>
+  <rect width="960" height="540" fill="#f6f7f2"/>
+  <rect x="36" y="28" width="888" height="484" rx="10" fill="#ffffff" stroke="#d7dccf"/>
+  <text x="68" y="76" font-family="Arial, sans-serif" font-size="30" font-weight="700" fill="#26322d">ResidualMap Bot</text>
+  <text x="68" y="108" font-family="Arial, sans-serif" font-size="16" fill="#65736a">Self-hosted finance dashboard - synthetic demo data</text>
+
+  <rect x="68" y="142" width="252" height="112" rx="8" fill="#eaf3ee" stroke="#c7dacf"/>
+  <text x="92" y="177" font-family="Arial, sans-serif" font-size="14" fill="#617067">Spent this month</text>
+  <text x="92" y="217" font-family="Arial, sans-serif" font-size="30" font-weight="700" fill="#1f4e3b">372,800 KZT</text>
+
+  <rect x="354" y="142" width="252" height="112" rx="8" fill="#eef1fb" stroke="#c9d1ec"/>
+  <text x="378" y="177" font-family="Arial, sans-serif" font-size="14" fill="#617067">Income</text>
+  <text x="378" y="217" font-family="Arial, sans-serif" font-size="30" font-weight="700" fill="#263f82">350,000 KZT</text>
+
+  <rect x="640" y="142" width="252" height="112" rx="8" fill="#fff1e8" stroke="#f0cfb7"/>
+  <text x="664" y="177" font-family="Arial, sans-serif" font-size="14" fill="#617067">Net</text>
+  <text x="664" y="217" font-family="Arial, sans-serif" font-size="30" font-weight="700" fill="#8b4024">-22,800 KZT</text>
+
+  <text x="68" y="306" font-family="Arial, sans-serif" font-size="20" font-weight="700" fill="#26322d">Top categories</text>
+  <rect x="68" y="332" width="824" height="26" rx="5" fill="#dfeee5"/>
+  <rect x="68" y="332" width="516" height="26" rx="5" fill="#4d9f75"/>
+  <text x="84" y="351" font-family="Arial, sans-serif" font-size="14" fill="#ffffff">Food - 118,600 KZT</text>
+  <rect x="68" y="376" width="824" height="26" rx="5" fill="#e7ebf8"/>
+  <rect x="68" y="376" width="184" height="26" rx="5" fill="#617ed3"/>
+  <text x="84" y="395" font-family="Arial, sans-serif" font-size="14" fill="#ffffff">Transport - 42,300 KZT</text>
+  <rect x="68" y="420" width="824" height="26" rx="5" fill="#f8eadf"/>
+  <rect x="68" y="420" width="130" height="26" rx="5" fill="#d58b56"/>
+  <text x="84" y="439" font-family="Arial, sans-serif" font-size="14" fill="#ffffff">Family support - 30,000 KZT</text>
+
+  <text x="68" y="482" font-family="Arial, sans-serif" font-size="14" fill="#65736a">Data owner: your Cloudflare D1 database. AI parsing is optional and uses your OpenAI key.</text>
+</svg>

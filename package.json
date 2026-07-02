@@ -1,14 +1,39 @@
 {
   "name": "residualmap-bot",
   "version": "0.1.0",
+  "description": "Self-hosted Telegram Mini App and expense-tracking bot for Cloudflare Workers, D1, and OpenAI.",
   "private": true,
+  "license": "MIT",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Serouce/residualmap-bot.git"
+  },
+  "homepage": "https://github.com/Serouce/residualmap-bot#readme",
+  "bugs": {
+    "url": "https://github.com/Serouce/residualmap-bot/issues"
+  },
+  "keywords": [
+    "telegram-bot",
+    "telegram-mini-app",
+    "cloudflare-workers",
+    "cloudflare-d1",
+    "openai",
+    "responses-api",
+    "self-hosted",
+    "personal-finance",
+    "expense-tracker",
+    "privacy"
+  ],
   "scripts": {
     "check": "node --check src/worker.js && node --check src/mini-app.js && node --check src/mini-app-client.js && node --check src/mini-app-styles.js && node test/worker.test.js",
+    "check:application": "node scripts/application-packet-check.mjs",
+    "check:public": "node scripts/public-readiness-check.mjs",
     "deploy": "wrangler deploy --keep-vars",
     "dev": "wrangler dev",
     "db:create": "wrangler d1 create residualmap_expenses",
-    "db:migrate": "wrangler d1 migrations apply residualmap_expenses --remote"
+    "db:migrate": "wrangler d1 migrations apply residualmap_expenses --remote",
+    "prepare:public-config": "node scripts/prepare-public-config.mjs"
   },
   "devDependencies": {
     "wrangler": "4.34.0"

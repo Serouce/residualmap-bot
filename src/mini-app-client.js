@@ -263,8 +263,7 @@ export const miniAppClientScript = `
       setCssVar("--surface-raised", params.secondary_bg_color || params.bg_color);
       setCssVar("--text", params.text_color);
       setCssVar("--muted", params.hint_color);
-      setCssVar("--accent", params.button_color);
-      setCssVar("--accent-text", params.button_text_color);
+      // Keep the product accent stable; Telegram button themes can make the whole UI read as purple.
       setCssVar("--line", params.section_separator_color);
     }
 

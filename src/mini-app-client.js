@@ -53,7 +53,7 @@ export const miniAppClientScript = `
         switchTab(button.dataset.tab);
       });
       $("tabs").addEventListener("keydown", handleTabsKeydown);
-      $("importAttention").addEventListener("click", function(event) {
+      $("appShell").addEventListener("click", function(event) {
         const button = event.target.closest("button[data-open-tab]");
         if (!button) return;
         switchTab(button.dataset.openTab);
@@ -378,10 +378,13 @@ export const miniAppClientScript = `
       $("heroMeta").textContent = "Личные расходы · " + formatRange(summary.period.start, summary.period.end) + " · " + plural(summary.transaction_count || 0, "запись", "записи", "записей");
       $("netFlow").textContent = signedMoney(net);
       $("sideNote").textContent = "Доходы минус личные расходы.";
+      $("flowState").textContent = net >= 0 ? "плюс" : "минус";
+      $("flowState").className = "flow-chip " + (net >= 0 ? "income" : "expense");
       $("rangeLabel").textContent = formatRange(summary.period.start, summary.period.end);
       updateDebtsTab(data.debts || []);
       updateImportsTab(importsSummary);
       renderImportAttention(importsSummary);
+      renderOverviewDock(summary, data.debts || [], importsSummary);
       $("metrics").innerHTML = [
         metric("Доходы", money(income), "поступления", "income"),
         metric("Чистый поток", signedMoney(net), "доходы минус расходы", net >= 0 ? "income" : "expense"),
@@ -397,6 +400,26 @@ export const miniAppClientScript = `
       renderLargest(summary.largest_expenses || []);
       renderFamilyHelp(summary.family_help || [], summary.family_help_counterparties || []);
       renderDebts(data.debts || [], "debtsFull", 50);
+    }
+
+    function renderOverviewDock(summary, debts, importsSummary) {
+      const draftCount = Number(importsSummary && importsSummary.draft_count || 0);
+      const latestImport = importsSummary && importsSummary.latest;
+      $("importDockValue").textContent = draftCount > 0
+        ? plural(draftCount, "черновик", "черновика", "черновиков")
+        : latestImport ? importStatusLabel(latestImport.status) : "Нет черновиков";
+      $("importDockMeta").textContent = draftCount > 0
+        ? "требует решения"
+        : latestImport ? (latestImport.file_name || "последняя выписка") : "отправьте PDF боту";
+
+      $("recordsDockValue").textContent = plural(summary.transaction_count || 0, "запись", "записи", "записей");
+      $("recordsDockMeta").textContent = formatRange(summary.period.start, summary.period.end);
+
+      const openDebtCount = kztItems(debts).filter(function(item) {
+        return Number(item.receivable_minor || 0) > 0 || Number(item.payable_minor || 0) > 0;
+      }).length;
+      $("debtsDockValue").textContent = openDebtCount > 0 ? plural(openDebtCount, "контрагент", "контрагента", "контрагентов") : "Нет";
+      $("debtsDockMeta").textContent = openDebtCount > 0 ? "открытые расчёты" : "открытых расчётов";
     }
 
     function updateDebtsTab(items) {

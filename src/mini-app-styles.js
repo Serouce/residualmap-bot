@@ -661,6 +661,104 @@ export const miniAppStyles = `
       padding: 0 13px;
     }
 
+    .review-queue {
+      display: grid;
+      grid-template-columns: minmax(150px, .32fr) minmax(0, 1fr);
+      align-items: stretch;
+      gap: 10px;
+      border-color: color-mix(in srgb, var(--accent) 28%, var(--line));
+      background: color-mix(in srgb, var(--accent) 7%, var(--surface));
+    }
+
+    .review-queue.is-clear {
+      grid-template-columns: 1fr;
+      border-color: color-mix(in srgb, var(--income) 28%, var(--line));
+      background: color-mix(in srgb, var(--income) 7%, var(--surface));
+    }
+
+    .review-queue-head {
+      display: grid;
+      align-content: center;
+      gap: 2px;
+      min-width: 0;
+    }
+
+    .review-items {
+      display: grid;
+      gap: 7px;
+      min-width: 0;
+    }
+
+    .review-item {
+      min-width: 0;
+      min-height: var(--tap);
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      padding: 9px 10px;
+      border: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
+      border-left-width: 4px;
+      border-radius: var(--radius);
+      background: color-mix(in srgb, var(--surface-raised) 92%, var(--surface));
+      text-align: left;
+      box-shadow: var(--shadow-soft);
+      transition: transform .16s ease, background-color .16s ease, border-color .16s ease;
+    }
+
+    .review-item:hover {
+      border-color: color-mix(in srgb, var(--accent) 34%, var(--line));
+      background: color-mix(in srgb, var(--accent) 5%, var(--surface));
+    }
+
+    .review-item:active {
+      transform: translateY(1px);
+    }
+
+    .review-import {
+      border-left-color: var(--debt);
+    }
+
+    .review-debt {
+      border-left-color: var(--support);
+    }
+
+    .review-item span,
+    .review-item strong,
+    .review-item small,
+    .review-item b {
+      min-width: 0;
+      max-width: 100%;
+    }
+
+    .review-item span {
+      display: grid;
+      gap: 1px;
+    }
+
+    .review-item strong {
+      color: var(--text);
+      font-size: 14px;
+      line-height: 1.25;
+      font-weight: 820;
+      overflow-wrap: anywhere;
+    }
+
+    .review-item small {
+      color: var(--muted);
+      font-size: 12.5px;
+      line-height: 1.3;
+      font-weight: 680;
+      overflow-wrap: anywhere;
+    }
+
+    .review-item b {
+      color: var(--accent);
+      font-size: 13px;
+      font-weight: 830;
+      white-space: nowrap;
+    }
+
     .metric-card {
       min-height: 98px;
       padding: 14px;
@@ -1916,6 +2014,7 @@ export const miniAppStyles = `
       }
 
       .notice-strip,
+      .review-queue,
       .import-card-head,
       .import-row,
       .import-actions {
@@ -1928,6 +2027,14 @@ export const miniAppStyles = `
 
       .notice-strip .secondary {
         width: 100%;
+      }
+
+      .review-item {
+        grid-template-columns: 1fr;
+      }
+
+      .review-item b {
+        white-space: normal;
       }
 
       .status-badge {

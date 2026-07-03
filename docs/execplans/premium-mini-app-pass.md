@@ -17,6 +17,10 @@ The pass is frontend-only. It uses existing data from `POST /api/app-data`, `POS
 - [x] (2026-07-03 12:24Z) Reworked import cards into a review-flow presentation while preserving existing `/api/import-action`.
 - [x] (2026-07-03 12:54Z) Ran syntax checks, inline Mini App validation, full tests, `git diff --check`, `npm.cmd run check:application`, and reviewed the diff for secrets.
 - [x] (2026-07-03 12:57Z) Attempted visual QA with local preview and Chrome headless; recorded environment limits below.
+- [x] (2026-07-03 17:52Z) Reworked the visual layer as a radical v2 after user feedback that the first premium pass still looked like an ugly MVP.
+- [x] (2026-07-03 17:52Z) Stopped the Mini App client from overwriting the product accent with Telegram button purple while preserving Telegram background, text, hint, and separator theme values.
+- [x] (2026-07-03 17:52Z) Re-ran static preview visual QA in Chrome headless and verified computed CSS has no horizontal overflow and uses high-contrast finance totals after the view animation completes.
+- [x] (2026-07-03 17:52Z) Re-ran the full v2 validation set: syntax checks, inline Mini App validation, `npm.cmd run check`, `git diff --check`, `npm.cmd run check:application`, and a diff scan for secrets or real IDs.
 
 ## Surprises & Discoveries
 
@@ -30,6 +34,12 @@ The pass is frontend-only. It uses existing data from `POST /api/app-data`, `POS
   Evidence: the in-app browser session timed out while opening `http://127.0.0.1:9798/`; `curl.exe -I --max-time 5 http://127.0.0.1:9798/` returned HTTP 200, and Chrome headless wrote screenshots under `%TEMP%`.
 - Observation: Chrome headless mobile screenshots displayed a wider layout crop for the top segmented controls, so the CSS now defensively prevents horizontal overflow in nav controls.
   Evidence: `src/mini-app-styles.js` adds `min-width: 0`, `width: 100%`, ellipsis, and `overflow-x: hidden` safeguards for the page and segmented controls.
+- Observation: The first premium pass still looked too close to the old MVP in the user's real screenshot.
+  Evidence: the screenshot showed a large boxed header, a white active tab slab, Telegram-purple accents, and heavy card stacking on the first viewport.
+- Observation: CSS alone did not fully decouple the accent color because `src/mini-app-client.js` reapplied `params.button_color` to `--accent` after Telegram initialized.
+  Evidence: `applyTelegramTheme()` previously called `setCssVar("--accent", params.button_color)` and `setCssVar("--accent-text", params.button_text_color)`.
+- Observation: The first static Chrome headless screenshot looked low contrast because it captured the start of the `.view` entrance animation.
+  Evidence: computed browser styles reported `h1` as `rgb(247, 243, 232)` and no horizontal overflow, while a later screenshot with `--virtual-time-budget=1000` showed the intended high-contrast totals.
 
 ## Decision Log
 
@@ -40,9 +50,18 @@ The pass is frontend-only. It uses existing data from `POST /api/app-data`, `POS
   Rationale: The earlier UX decision explicitly scoped the first review queue to existing data. A visual premium pass can improve the current experience without new database risk.
   Date/Author: 2026-07-03 / Codex
 
+- Decision: Make v2 more radical by removing the boxed header/card-heavy hierarchy and switching active tab state from a large filled slab to a thin underline state.
+  Rationale: The user's screenshot showed that the previous treatment still felt like a basic MVP with oversized boxes. The premium direction should feel like a compact finance instrument panel, not a stack of equal-weight cards.
+  Date/Author: 2026-07-03 / Codex
+- Decision: Keep Telegram theme integration for background, text, hint, and separators, but do not let Telegram button color drive the whole brand accent.
+  Rationale: Telegram themes can make the app purple even when the CSS defines a finance-grade teal/metal accent. That was one of the most visible reasons the app did not feel premium.
+  Date/Author: 2026-07-03 / Codex
+
 ## Outcomes & Retrospective
 
 Implementation is complete for this pass. `Обзор` now puts `Нужно проверить` directly after the finance summary and lowers the visual weight of secondary dock/metric cards. `Импорт` now presents each draft as a review workflow with `Черновик`, `Проверка`, and `Запись` stages plus clearer semantic fact lanes. Automated checks passed; visual QA was limited by the local browser behavior recorded above.
+
+Radical v2 update: the first pass has been revised to make the header lighter, remove the large white active tab slab, replace purple with a stable teal/metal finance accent, consolidate the first viewport into one stronger finance board, and keep import review cards as the main raised surfaces. The full v2 validation set passed after these changes.
 
 ## Context and Orientation
 
@@ -90,6 +109,8 @@ Automated acceptance requires all syntax checks and `npm.cmd run check` to pass.
 
 Human acceptance is: on `Обзор`, the first screen reads as a command center with a clear money summary and a visible `Нужно проверить` block before secondary analytics. On `Импорт`, a PDF draft reads as a review task with clear risk lanes and totals before row previews. At 360px width, long merchant names, buttons, facts, and badges must wrap without overlap. In dark theme, background, surfaces, borders, muted text, and semantic colors remain legible.
 
+For the radical v2 revision, also verify that a Telegram purple button theme does not recolor the whole app, the active top-level tab is not a giant white slab, the header is not framed as a large card, and the main amount remains high contrast after the entrance animation completes.
+
 ## Idempotence and Recovery
 
 The pass is safe to retry because it does not mutate data, schema, or external services. If a visual change causes a layout regression, revert the relevant CSS block or the small markup change while keeping the existing backend routes unchanged. The existing card confirm/cancel flow and Telegram `MainButton` should remain available throughout.
@@ -103,3 +124,5 @@ This plan builds on the already implemented `Нужно проверить Lite`
 Do not add npm dependencies. Use vanilla HTML, CSS, and the existing Mini App client script. Preserve IDs used by `src/mini-app-client.js`: `appShell`, `periods`, `tabs`, `heroSpend`, `periodName`, `heroMeta`, `netFlow`, `flowState`, `sideNote`, `importAttention`, `metrics`, `dailyChart`, `categoryTotals`, `categories`, `largest`, `importsCanvas`, and related record/import controls. Preserve Telegram Mini App integration by leaving `window.Telegram.WebApp` feature checks in the client.
 
 Revision note, 2026-07-03: Created for the user-requested premium design pass after three design subagents agreed that the UI needs stronger hierarchy, calmer finance-grade styling, and import review-flow polish rather than decorative effects.
+
+Revision note, 2026-07-03: Added the radical v2 direction after the user rejected the first premium pass as still ugly and MVP-like. The key correction is to make the visual system more decisive while keeping the backend, data contracts, and import workflow unchanged.

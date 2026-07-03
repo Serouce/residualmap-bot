@@ -1,5 +1,7 @@
 export const miniAppClientScript = `
     const tg = window.Telegram && window.Telegram.WebApp;
+    const appTabs = ["overview", "records", "import", "debts"];
+    const importFilters = ["attention", "history", "duplicates", "skipped"];
     const colors = ["var(--category-a)", "var(--category-b)", "var(--category-c)", "var(--category-d)", "var(--category-e)"];
     const recordViews = ["feed", "table", "groups"];
     const sortFields = ["date", "amount", "kind", "category", "counterparty", "id"];
@@ -10,14 +12,18 @@ export const miniAppClientScript = `
     };
     const state = {
       period: "month",
-      tab: "overview",
+      tab: initialTabFromLocation(),
       kindPreset: "all",
+      importFilter: "attention",
+      targetBatchId: initialBatchFromLocation(),
+      highlightedBatchId: null,
       recordView: normalizeRecordView(readPref(storageKeys.recordView, "feed")),
       density: normalizeDensity(readPref(storageKeys.density, "comfortable")),
       sort: normalizeSort(readJsonPref(storageKeys.sort, { field: "date", dir: "desc" })),
       data: null,
       records: [],
       imports: [],
+      importErrors: {},
       categories: [],
       selected: null,
       searchTimer: null,
@@ -29,6 +35,7 @@ export const miniAppClientScript = `
     setupTelegramShell();
     bindEvents();
     applyRecordPreferences();
+    syncTabsAndPanels(state.tab);
     loadAll();
 
     function bindEvents() {
@@ -54,6 +61,13 @@ export const miniAppClientScript = `
 
       $("refresh").addEventListener("click", loadAll);
       $("refreshImports").addEventListener("click", loadImports);
+      $("importFilters").addEventListener("click", function(event) {
+        const button = event.target.closest("button[data-import-filter]");
+        if (!button) return;
+        state.importFilter = normalizeImportFilter(button.dataset.importFilter);
+        syncImportFilterButtons();
+        renderImports();
+      });
       $("clearSearch").addEventListener("click", function() {
         const input = $("recordSearch");
         input.value = "";
@@ -111,13 +125,26 @@ export const miniAppClientScript = `
       const button = document.querySelector("[data-tab='" + tab + "']");
       if (!button) return;
       state.tab = button.dataset.tab;
-      setActive("#tabs button", button);
-      for (const view of document.querySelectorAll(".view")) {
-        view.classList.toggle("active", view.id === "view-" + state.tab);
-      }
+      syncTabsAndPanels(state.tab);
       if (state.tab === "records") loadRecords();
       if (state.tab === "import") loadImports();
       if (state.tab === "overview") scheduleChartRerender();
+    }
+
+    function syncTabsAndPanels(tab) {
+      const activeTab = appTabs.includes(tab) ? tab : "overview";
+      for (const button of document.querySelectorAll("#tabs button[data-tab]")) {
+        const isActive = button.dataset.tab === activeTab;
+        button.classList.toggle("active", isActive);
+        button.setAttribute("aria-selected", String(isActive));
+        button.tabIndex = isActive ? 0 : -1;
+      }
+      for (const view of document.querySelectorAll(".view")) {
+        const isActive = view.id === "view-" + activeTab;
+        view.classList.toggle("active", isActive);
+        view.hidden = !isActive;
+        view.setAttribute("aria-hidden", String(!isActive));
+      }
     }
 
     function handleTabsKeydown(event) {
@@ -133,6 +160,39 @@ export const miniAppClientScript = `
       if (event.key === "End") next = buttons.length - 1;
       buttons[next].focus();
       switchTab(buttons[next].dataset.tab);
+    }
+
+    function initialTabFromLocation() {
+      try {
+        const url = new URL(window.location.href);
+        const queryTab = normalizeTab(url.searchParams.get("tab"));
+        if (queryTab) return queryTab;
+        const hashValue = decodeURIComponent((url.hash || "").replace(/^#/, ""));
+        const hashTab = normalizeTab(hashValue.split("?")[0]);
+        if (hashTab) return hashTab;
+        if (url.searchParams.get("batch") || url.searchParams.get("batch_id")) return "import";
+      } catch (error) {}
+      return "overview";
+    }
+
+    function initialBatchFromLocation() {
+      try {
+        const url = new URL(window.location.href);
+        const queryBatch = Number(url.searchParams.get("batch") || url.searchParams.get("batch_id") || 0);
+        if (queryBatch > 0) return queryBatch;
+        const hashValue = decodeURIComponent((url.hash || "").replace(/^#/, ""));
+        const queryIndex = hashValue.indexOf("?");
+        if (queryIndex !== -1) {
+          const params = new URLSearchParams(hashValue.slice(queryIndex + 1));
+          const hashBatch = Number(params.get("batch") || params.get("batch_id") || 0);
+          if (hashBatch > 0) return hashBatch;
+        }
+      } catch (error) {}
+      return null;
+    }
+
+    function normalizeTab(value) {
+      return appTabs.includes(value) ? value : "";
     }
 
     function $(id) {
@@ -277,20 +337,27 @@ export const miniAppClientScript = `
         renderCategoryOptions();
         renderRecords();
       } catch (error) {
-        $("recordsCanvas").innerHTML = "<div class='error'>" + escapeHtml(error.message) + "</div>";
+        $("recordsCanvas").innerHTML = "<div class='error' role='alert'>" + escapeHtml(error.message) + "</div>";
       }
     }
 
     async function loadImports() {
       if (!initData()) return;
-      $("importsCanvas").innerHTML = "<div class='skeleton'></div><div class='skeleton'></div>";
+      setImportRefreshLoading(true);
+      renderImportLoading();
       try {
         const data = await api("/api/imports", { limit: 12 });
         state.imports = data.imports || [];
+        syncImportTargetFilter();
         renderImports();
+        requestImportBatchFocus();
         updateImportsTab({ draft_count: data.draft_count || 0, latest: state.imports[0] || null });
       } catch (error) {
-        $("importsCanvas").innerHTML = "<div class='error'>" + escapeHtml(error.message) + "</div>";
+        state.imports = [];
+        $("importCount").textContent = "ошибка загрузки";
+        renderImportError(error.message);
+      } finally {
+        setImportRefreshLoading(false);
       }
     }
 
@@ -347,16 +414,26 @@ export const miniAppClientScript = `
       const root = $("importAttention");
       const latest = summary && summary.latest;
       const draftCount = Number(summary && summary.draft_count || 0);
-      if (!root || draftCount <= 0 || !latest) {
+      if (!root || draftCount <= 0) {
         root.hidden = true;
         if (root) root.innerHTML = "";
         return;
       }
+      const importable = latest ? Number(latest.importable_count || 0) : 0;
+      const duplicateCount = latest ? Number(latest.duplicate_count || 0) : 0;
+      const meta = latest
+        ? [
+            latest.file_name || "PDF-выписка",
+            importPeriod(latest),
+            "к записи " + importable,
+            duplicateCount > 0 ? "дубли " + duplicateCount : ""
+          ].filter(Boolean).join(" · ")
+        : "Откройте импорт и примите решение по черновикам.";
       root.hidden = false;
       root.innerHTML =
-        "<div><div class='notice-title'>" + escapeHtml(plural(draftCount, "черновик импорта", "черновика импорта", "черновиков импорта")) + "</div>" +
-        "<div class='notice-meta'>" + escapeHtml((latest.file_name || "PDF-выписка") + " · " + importPeriod(latest) + " · к записи " + (latest.importable_count || 0)) + "</div></div>" +
-        "<button class='secondary' type='button' data-open-tab='import'>Открыть</button>";
+        "<div class='notice-main'><div class='notice-kicker'>Нужно решение</div><div class='notice-title'>" + escapeHtml(plural(draftCount, "черновик импорта", "черновика импорта", "черновиков импорта")) + "</div>" +
+        "<div class='notice-meta'>" + escapeHtml(meta) + "</div></div>" +
+        "<button class='secondary' type='button' data-open-tab='import'><span class='button-label'>Проверить</span></button>";
     }
 
     function hasOpenDebts(items) {
@@ -561,9 +638,10 @@ export const miniAppClientScript = `
 
     function renderRecords() {
       updateRecordsCanvasClass();
-      $("recordCount").textContent = plural(state.records.length, "запись", "записи", "записей");
+      $("recordCount").textContent = plural(state.records.length, "запись", "записи", "записей") + " · до 50 за период";
+      renderRecordFilterChips();
       if (!state.records.length) {
-        $("recordsCanvas").innerHTML = "<div class='empty'>Записей по выбранным фильтрам нет.</div>";
+        $("recordsCanvas").innerHTML = "<div class='empty records-empty'><div class='empty-title'>Записей по выбранным фильтрам нет</div><div class='empty-meta'>Сбросьте фильтры или выберите другой период.</div><button class='secondary' type='button' data-reset-record-filters><span class='button-label'>Сбросить фильтры</span></button></div>";
         return;
       }
       const sorted = sortRecords(state.records);
@@ -578,22 +656,55 @@ export const miniAppClientScript = `
 
     function renderImports() {
       const root = $("importsCanvas");
-      $("importCount").textContent = plural(state.imports.length, "импорт", "импорта", "импортов");
+      const draftCount = state.imports.filter(function(batch) { return batch.status === "draft"; }).length;
+      const visibleImports = filteredImports();
+      syncImportFilterButtons();
+      $("importCount").textContent = draftCount > 0
+        ? plural(draftCount, "черновик", "черновика", "черновиков") + " · " + plural(state.imports.length, "импорт", "импорта", "импортов")
+        : plural(state.imports.length, "импорт", "импорта", "импортов");
       if (!state.imports.length) {
-        root.innerHTML = "<div class='empty import-empty'>Отправьте PDF-выписку боту в Telegram. Здесь появятся черновики, дубли, пропущенные строки и история подтверждений.</div>";
+        root.innerHTML = "<div class='empty import-empty'><div class='empty-title'>Нет черновиков импорта</div><div class='empty-meta'>Отправьте PDF-выписку боту в Telegram. Здесь появится черновик для проверки перед записью.</div></div>";
+        return;
+      }
+      if (!visibleImports.length) {
+        root.innerHTML = "<div class='empty import-empty'><div class='empty-title'>В этом фильтре пусто</div><div class='empty-meta'>" + escapeHtml(importFilterEmptyText(state.importFilter)) + "</div></div>";
         return;
       }
       root.innerHTML = "";
       const fragment = document.createDocumentFragment();
-      for (const batch of state.imports) fragment.appendChild(importCard(batch));
+      for (const batch of visibleImports) fragment.appendChild(importCard(batch));
       root.appendChild(fragment);
+    }
+
+    function renderImportLoading() {
+      $("importsCanvas").innerHTML =
+        "<div class='import-loading' role='status' aria-live='polite' aria-busy='true'>" +
+          "<div class='skeleton import-skeleton'></div>" +
+          "<div class='skeleton import-skeleton'></div>" +
+          "<div class='loading-copy'>Загружаю черновики и историю импорта...</div>" +
+        "</div>";
+    }
+
+    function renderImportError(message) {
+      $("importsCanvas").innerHTML =
+        "<div class='error import-error' role='alert'><div class='empty-title'>Импорт не загрузился</div>" +
+        "<div class='empty-meta'>" + escapeHtml(message || "Повторите обновление импорта.") + "</div></div>";
     }
 
     function importCard(batch) {
       const element = document.createElement("article");
       const status = batch.status || "draft";
       const importable = Number(batch.importable_count || 0);
+      const duplicateCount = Number(batch.duplicate_count || 0);
+      const skippedCount = Number(batch.skipped_count || 0);
+      const summaryStatus = status === "draft"
+        ? (importable > 0 ? "готово к записи " + importable : "нет строк к записи")
+        : importHistoryLine(batch);
       element.className = "import-card import-" + status;
+      if (Number(batch.id) === Number(state.highlightedBatchId)) element.classList.add("is-target");
+      element.dataset.importBatchId = batch.id;
+      element.id = "import-batch-" + batch.id;
+      element.tabIndex = -1;
       element.innerHTML =
         "<div class='import-card-head'>" +
           "<div class='import-title-wrap'><div class='import-title'></div><div class='import-subtitle'></div></div>" +
@@ -602,15 +713,18 @@ export const miniAppClientScript = `
         "<div class='import-facts'>" +
           importFact("Период", importPeriod(batch)) +
           importFact("Строки", String(batch.item_count || 0)) +
-          importFact("К записи", String(importable)) +
-          importFact("Дубли", String(batch.duplicate_count || 0)) +
-          importFact("Пропущено", String(batch.skipped_count || 0)) +
+          importFact("Статус", summaryStatus, status === "draft" && importable > 0 ? "debt" : "") +
+          importFact("К записи", String(importable), importable > 0 ? "debt" : "") +
+          importFact("Дубли", String(duplicateCount), duplicateCount > 0 ? "duplicate" : "") +
+          importFact("Пропущено", String(skippedCount), skippedCount > 0 ? "skipped" : "") +
           importFact("Расход", money(batch.expense_minor || 0), "expense") +
           importFact("Доход", money(batch.income_minor || 0), "income") +
           importFact("Импортировано", String(batch.import_count || 0)) +
         "</div>" +
-        importWarning(batch) +
-        "<div class='import-preview'>" + importPreviewRows(batch.items || []) + "</div>" +
+        importDecisionSummary(batch, importable, duplicateCount, skippedCount) +
+        importNotices(batch) +
+        importInlineError(batch) +
+        importPreviewSection(batch) +
         importActions(batch, importable);
       element.querySelector(".import-title").textContent = batch.file_name || batch.source_name || "PDF-выписка";
       element.querySelector(".import-subtitle").textContent = [
@@ -626,36 +740,100 @@ export const miniAppClientScript = `
       return "<div class='import-fact'><div class='label'>" + escapeHtml(label) + "</div><div class='value" + (tone ? " " + escapeAttr(tone) : "") + "'>" + escapeHtml(value || "0") + "</div></div>";
     }
 
-    function importWarning(batch) {
-      const warnings = [];
-      if (batch.truncated) warnings.push("Выписка длинная: показана и обработана ограниченная часть строк.");
-      if (batch.warning) warnings.push(batch.warning);
-      if (!warnings.length) return "";
-      return "<div class='import-warning'>" + warnings.map(escapeHtml).join("<br>") + "</div>";
+    function importDecisionSummary(batch, importable, duplicateCount, skippedCount) {
+      if (batch.status !== "draft") return "";
+      const title = importable > 0
+        ? plural(importable, "строка готова к записи", "строки готовы к записи", "строк готовы к записи")
+        : "Нет строк, которые можно импортировать";
+      const meta = [
+        duplicateCount > 0 ? plural(duplicateCount, "дубль будет пропущен", "дубля будут пропущены", "дублей будут пропущены") : "",
+        skippedCount > 0 ? plural(skippedCount, "пропуск требует ручной проверки", "пропуска требуют ручной проверки", "пропусков требуют ручной проверки") : "",
+        importable > 0 ? "Подтвердите импорт или отмените черновик." : "Черновик можно отменить."
+      ].filter(Boolean).join(" · ");
+      return "<div class='import-decision-summary'><strong>" + escapeHtml(title) + "</strong><span>" + escapeHtml(meta) + "</span></div>";
+    }
+
+    function importInlineError(batch) {
+      const message = state.importErrors[String(batch.id)];
+      if (!message) return "";
+      return "<div class='error import-inline-error' role='alert'>" + escapeHtml(message) + "</div>";
+    }
+
+    function importNotices(batch) {
+      const notices = [];
+      const duplicateCount = Number(batch.duplicate_count || 0);
+      const skippedCount = Number(batch.skipped_count || 0);
+      if (batch.truncated) {
+        notices.push(importNotice("truncated", "Обрезано", batch.warning || "Выписка длинная: показана и обработана ограниченная часть строк."));
+      } else if (batch.warning) {
+        notices.push(importNotice("warning", "Предупреждение", batch.warning));
+      }
+      if (duplicateCount > 0) notices.push(importNotice("duplicate", "Дубли", plural(duplicateCount, "строка похожа на существующую запись", "строки похожи на существующие записи", "строк похожи на существующие записи")));
+      if (skippedCount > 0) notices.push(importNotice("skipped", "Пропущено", plural(skippedCount, "строка не готова к записи", "строки не готовы к записи", "строк не готовы к записи")));
+      if (!notices.length) return "";
+      return "<div class='import-notices'>" + notices.join("") + "</div>";
+    }
+
+    function importNotice(type, title, text) {
+      return "<div class='import-notice notice-" + escapeAttr(type) + "'><span>" + escapeHtml(title) + "</span><p>" + escapeHtml(text) + "</p></div>";
+    }
+
+    function importPreviewSection(batch) {
+      const items = batch.items || [];
+      const historySummary = batch.status !== "draft" ? importHistorySummary(batch) : "";
+      if (!items.length) {
+        if (historySummary) return historySummary;
+        return "<div class='import-preview'><div class='empty compact'>В черновике нет строк для предпросмотра.</div></div>";
+      }
+      return historySummary + "<div class='import-preview-head'><span>" + escapeHtml("Показано " + items.length + " из " + (batch.item_count || items.length)) + "</span><span>" + escapeHtml(importPreviewStatusText(batch)) + "</span></div>" +
+        "<div class='import-preview' aria-label='Предпросмотр строк импорта'>" + importPreviewRows(items) + "</div>";
     }
 
     function importPreviewRows(items) {
-      if (!items.length) return "<div class='empty compact'>Строки для предпросмотра не найдены.</div>";
       return items.map(function(item) {
         const title = item.description || item.counterparty || item.raw_text || "Операция";
         const category = [item.category, item.subcategory].filter(Boolean).join(" · ") || "Без категории";
         const tone = item.kind === "income" ? "income" : "expense";
-        const reason = item.status_reason || importItemStatusLabel(item.status);
-        return "<div class='import-row status-" + escapeAttr(item.status || "draft") + "'>" +
-          "<div class='import-row-main'><div class='record-title'>" + escapeHtml(title) + "</div>" +
-          "<div class='record-meta'>" + escapeHtml([formatDate(item.local_date), category, reason].filter(Boolean).join(" · ")) + "</div></div>" +
+        const status = item.status || "draft";
+        const reason = importItemReason(item);
+        return "<div class='import-row status-" + escapeAttr(status) + "'>" +
+          "<div class='import-row-main'><div class='import-row-title'><div class='record-title'>" + escapeHtml(title) + "</div>" +
+          "<span class='status-badge row-status status-" + escapeAttr(status) + "'>" + escapeHtml(importItemStatusLabel(status)) + "</span></div>" +
+          "<div class='record-meta'>" + escapeHtml([formatDate(item.local_date), category, item.counterparty].filter(Boolean).join(" · ")) + "</div>" +
+          (reason ? "<div class='import-row-reason'>" + escapeHtml(reason) + "</div>" : "") + "</div>" +
           "<div class='record-side'><div class='amount " + tone + "'>" + escapeHtml(money(item.amount_minor || 0)) + "</div>" +
-          "<div class='record-id'>" + escapeHtml(importItemStatusLabel(item.status)) + "</div></div>" +
+          "<div class='record-id'>" + escapeHtml(kindLabel(item.kind)) + "</div></div>" +
         "</div>";
       }).join("");
     }
 
+    function importPreviewStatusText(batch) {
+      if (batch.status === "draft") return "проверьте строки перед записью";
+      if (batch.status === "confirmed") return "снимок истории";
+      if (batch.status === "cancelled") return "черновик был отменен";
+      return importStatusLabel(batch.status);
+    }
+
+    function importItemReason(item) {
+      if (item.status_reason) return item.status_reason;
+      if (item.status === "duplicate") {
+        return item.duplicate_transaction_id
+          ? "Похоже на уже записанную операцию #" + item.duplicate_transaction_id
+          : "Похоже на уже записанную операцию";
+      }
+      if (item.status === "skipped") return "Строка не готова к автоматической записи";
+      if (item.status === "cancelled") return "Отменено вместе с черновиком";
+      if (item.status === "imported") return "Уже записано в операции";
+      if (item.status === "draft") return "Будет записано после подтверждения";
+      return "";
+    }
+
     function importActions(batch, importable) {
       if (batch.status !== "draft") return "";
-      const confirmDisabled = importable <= 0 ? " disabled" : "";
+      const confirmDisabled = importable <= 0 ? " disabled data-import-disabled='true'" : "";
       return "<div class='import-actions'>" +
-        "<button class='primary' type='button' data-import-action='confirm' data-id='" + escapeAttr(batch.id) + "'" + confirmDisabled + ">Импортировать</button>" +
-        "<button class='danger' type='button' data-import-action='cancel' data-id='" + escapeAttr(batch.id) + "'>Отменить</button>" +
+        "<button class='primary' type='button' data-import-action='confirm' data-id='" + escapeAttr(batch.id) + "' data-loading-label='Импорт...'" + confirmDisabled + "><span class='button-label'>Импортировать</span></button>" +
+        "<button class='danger' type='button' data-import-action='cancel' data-id='" + escapeAttr(batch.id) + "' data-loading-label='Отмена...'><span class='button-label'>Отменить</span></button>" +
       "</div>";
     }
 
@@ -670,23 +848,169 @@ export const miniAppClientScript = `
         : "Отменить черновик импорта " + (batch.file_name || ("#" + batchId)) + "?";
       const ok = await confirmAction(question);
       if (!ok) return;
-      const originalText = button.textContent;
-      button.disabled = true;
-      button.textContent = action === "confirm" ? "Импорт..." : "Отмена...";
+      let succeeded = false;
+      delete state.importErrors[String(batchId)];
+      setImportActionState(batchId, action, true);
       try {
         await api("/api/import-action", { batch_id: batchId, action: action });
         notifySuccess();
+        succeeded = true;
         await loadImports();
         await loadOverview();
       } catch (error) {
-        alert(error.message);
+        state.importErrors[String(batchId)] = error.message;
+        renderImports();
+        requestImportBatchFocus(batchId);
       } finally {
-        button.disabled = false;
-        button.textContent = originalText;
+        if (!succeeded) setImportActionState(batchId, action, false);
       }
     }
 
+    function importHistorySummary(batch) {
+      const time = batch.status === "confirmed" ? batch.confirmed_at : batch.cancelled_at;
+      const label = batch.status === "confirmed" ? "Подтверждено" : batch.status === "cancelled" ? "Отменено" : importStatusLabel(batch.status);
+      return "<div class='import-history-summary'>" +
+        historyFact(label, time ? formatDateTime(time) : formatDateTime(batch.updated_at || batch.created_at)) +
+        historyFact("Импортировано", String(batch.import_count || 0)) +
+        historyFact("Дубли / пропущено", String(batch.duplicate_count || 0) + " / " + String(batch.skipped_count || 0)) +
+      "</div>";
+    }
+
+    function importHistoryLine(batch) {
+      if (batch.status === "confirmed") return "записано " + (batch.import_count || 0);
+      if (batch.status === "cancelled") return "черновик отменен";
+      if (batch.status === "failed") return "требует проверки";
+      return importStatusLabel(batch.status);
+    }
+
+    function historyFact(label, value) {
+      return "<div class='history-fact'><div class='label'>" + escapeHtml(label) + "</div><div class='value'>" + escapeHtml(value || "—") + "</div></div>";
+    }
+
+    function setImportActionState(batchId, action, isLoading) {
+      const buttons = document.querySelectorAll("#importsCanvas button[data-import-action][data-id='" + escapeAttr(batchId) + "']");
+      for (const item of buttons) {
+        const isTarget = item.dataset.importAction === action;
+        const permanentlyDisabled = item.dataset.importDisabled === "true";
+        item.disabled = isLoading || permanentlyDisabled;
+        item.classList.toggle("is-loading", isLoading && isTarget);
+        item.setAttribute("aria-busy", String(isLoading && isTarget));
+      }
+    }
+
+    function setImportRefreshLoading(isLoading) {
+      const button = $("refreshImports");
+      if (!button) return;
+      button.disabled = isLoading;
+      button.classList.toggle("is-loading", isLoading);
+      button.setAttribute("aria-busy", String(isLoading));
+    }
+
+    function filteredImports() {
+      return state.imports.filter(function(batch) {
+        if (state.importFilter === "history") return batch.status !== "draft";
+        if (state.importFilter === "duplicates") return Number(batch.duplicate_count || 0) > 0 || hasImportItemStatus(batch, "duplicate");
+        if (state.importFilter === "skipped") return Number(batch.skipped_count || 0) > 0 || hasImportItemStatus(batch, "skipped");
+        return batch.status === "draft";
+      });
+    }
+
+    function hasImportItemStatus(batch, status) {
+      return (batch.items || []).some(function(item) { return item.status === status; });
+    }
+
+    function syncImportFilterButtons() {
+      const counts = importFilterCounts();
+      for (const button of document.querySelectorAll("#importFilters button[data-import-filter]")) {
+        const filter = normalizeImportFilter(button.dataset.importFilter);
+        const count = counts[filter] || 0;
+        const isActive = filter === state.importFilter;
+        button.classList.toggle("active", isActive);
+        button.setAttribute("aria-pressed", String(isActive));
+        button.textContent = (button.dataset.label || button.textContent || filter) + (count > 0 ? " " + count : "");
+      }
+    }
+
+    function importFilterCounts() {
+      return {
+        attention: state.imports.filter(function(batch) { return batch.status === "draft"; }).length,
+        history: state.imports.filter(function(batch) { return batch.status !== "draft"; }).length,
+        duplicates: state.imports.filter(function(batch) { return Number(batch.duplicate_count || 0) > 0 || hasImportItemStatus(batch, "duplicate"); }).length,
+        skipped: state.imports.filter(function(batch) { return Number(batch.skipped_count || 0) > 0 || hasImportItemStatus(batch, "skipped"); }).length
+      };
+    }
+
+    function importFilterEmptyText(filter) {
+      if (filter === "history") return "Подтвержденные и отмененные импорты появятся здесь после решения по черновику.";
+      if (filter === "duplicates") return "Дублей в последних импортированных выписках не найдено.";
+      if (filter === "skipped") return "Пропущенных строк в последних выписках нет.";
+      return "Отправьте PDF-выписку боту: здесь появится черновик, который требует решения.";
+    }
+
+    function syncImportTargetFilter() {
+      if (!state.targetBatchId) return;
+      const batch = state.imports.find(function(item) { return Number(item.id) === Number(state.targetBatchId); });
+      if (!batch) return;
+      state.highlightedBatchId = Number(batch.id);
+      state.importFilter = batch.status === "draft" ? "attention" : "history";
+    }
+
+    function requestImportBatchFocus(batchId) {
+      const targetId = Number(batchId || state.targetBatchId || state.highlightedBatchId || 0);
+      if (!targetId) return;
+      state.highlightedBatchId = targetId;
+      setTimeout(function() {
+        const card = document.querySelector("[data-import-batch-id='" + targetId + "']");
+        if (!card) return;
+        card.classList.add("is-target");
+        card.scrollIntoView({ block: "center", behavior: prefersReducedMotion() ? "auto" : "smooth" });
+        try { card.focus({ preventScroll: true }); } catch (error) { card.focus(); }
+      }, 0);
+    }
+
+    function normalizeImportFilter(value) {
+      return importFilters.includes(value) ? value : "attention";
+    }
+
+    function renderRecordFilterChips() {
+      const root = $("recordFilterChips");
+      if (!root) return;
+      const chips = ["до 50 записей за период"];
+      if (state.kindPreset !== "all") chips.push(kindPresetLabel(state.kindPreset));
+      if ($("statusFilter").value === "deleted") chips.push("удаленные");
+      if ($("categoryFilter").value) chips.push($("categoryFilter").value);
+      if ($("recordSearch").value.trim()) chips.push("поиск: " + $("recordSearch").value.trim());
+      root.innerHTML = chips.map(function(label) { return "<span class='filter-chip'>" + escapeHtml(label) + "</span>"; }).join("") +
+        (chips.length > 1 ? "<button class='filter-reset' type='button' data-reset-record-filters>Сбросить</button>" : "");
+    }
+
+    function kindPresetLabel(value) {
+      if (value === "expense") return "расходы";
+      if (value === "income") return "доходы";
+      if (value === "debt") return "долги";
+      return "все типы";
+    }
+
+    function resetRecordFilters() {
+      state.kindPreset = "all";
+      $("recordSearch").value = "";
+      $("statusFilter").value = "active";
+      $("categoryFilter").value = "";
+      const button = document.querySelector("#kindQuick button[data-kind-preset='all']");
+      if (button) setActive("#kindQuick button", button);
+      loadRecords();
+    }
+
+    function prefersReducedMotion() {
+      return window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    }
+
     function handleRecordsAction(event) {
+      const resetButton = event.target.closest("button[data-reset-record-filters]");
+      if (resetButton) {
+        resetRecordFilters();
+        return;
+      }
       const sortButton = event.target.closest("button[data-sort]");
       if (sortButton) {
         updateSort(sortButton.dataset.sort);
@@ -732,7 +1056,7 @@ export const miniAppClientScript = `
         ["id", "ID"]
       ];
       $("recordsCanvas").innerHTML =
-        "<div class='table-scroll'><table class='ledger-table'><thead><tr>" +
+        "<div class='table-scroll' aria-label='Таблица записей с горизонтальной прокруткой'><table class='ledger-table'><caption>До 50 записей за период. На узком экране таблицу можно прокрутить по горизонтали.</caption><thead><tr>" +
         headers.map(function(header) { return tableHeader(header[0], header[1]); }).join("") +
         "</tr></thead><tbody>" +
         items.map(function(item) {
@@ -922,16 +1246,18 @@ export const miniAppClientScript = `
       $("sheetAction").textContent = isDeleted ? "Восстановить" : "Удалить";
       $("sheetAction").className = isDeleted ? "primary" : "danger";
       $("sheetBackdrop").classList.add("open");
+      $("closeSheet").focus();
+      setAppInert(true);
       if (tg && tg.BackButton) {
         state.backHandler = closeSheet;
         if (typeof tg.BackButton.onClick === "function") tg.BackButton.onClick(state.backHandler);
         if (typeof tg.BackButton.show === "function") tg.BackButton.show();
       }
-      setTimeout(function() { $("closeSheet").focus(); }, 0);
     }
 
     function closeSheet() {
       $("sheetBackdrop").classList.remove("open");
+      setAppInert(false);
       if (tg && tg.BackButton && state.backHandler) {
         if (typeof tg.BackButton.offClick === "function") tg.BackButton.offClick(state.backHandler);
         if (typeof tg.BackButton.hide === "function") tg.BackButton.hide();
@@ -940,6 +1266,16 @@ export const miniAppClientScript = `
       state.selected = null;
       if (state.lastFocus && typeof state.lastFocus.focus === "function") state.lastFocus.focus();
       state.lastFocus = null;
+    }
+
+    function setAppInert(isInert) {
+      const shell = $("appShell");
+      if (!shell) return;
+      shell.setAttribute("aria-hidden", String(isInert));
+      try {
+        shell.inert = Boolean(isInert);
+      } catch (error) {}
+      if (!isInert) shell.removeAttribute("aria-hidden");
     }
 
     function handleSheetKeydown(event) {
@@ -1174,11 +1510,11 @@ export const miniAppClientScript = `
 
     function importItemStatusLabel(status) {
       const labels = {
-        draft: "к записи",
-        imported: "записана",
+        draft: "готово",
+        imported: "записано",
         duplicate: "дубль",
         skipped: "пропуск",
-        cancelled: "отменена"
+        cancelled: "отменено"
       };
       return labels[status] || status || "строка";
     }

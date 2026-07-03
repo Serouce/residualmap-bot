@@ -971,7 +971,7 @@ test("Telegram PDF import creates a draft and does not insert transactions befor
 
   const response = await sendTelegramDocument({
     db,
-    env: { OPENAI_API_KEY: "test-openai-key" },
+    env: { OPENAI_API_KEY: "test-openai-key", MINI_APP_URL: "https://mini.example/app" },
     document: {
       file_id: "pdf-file",
       file_unique_id: "unique-pdf",
@@ -1009,6 +1009,9 @@ test("Telegram PDF import creates a draft and does not insert transactions befor
   const summaryBody = JSON.parse(summaryCall.init.body);
   assert.match(summaryBody.text, /Черновик импорта PDF-выписки готов/);
   assert.equal(summaryBody.reply_markup.inline_keyboard[0][0].callback_data, "import:confirm:501");
+  assert.equal(summaryBody.reply_markup.inline_keyboard[1][0].text, "Открыть панель");
+  assert.ok(summaryBody.reply_markup.inline_keyboard[1][0].web_app);
+  assert.equal(summaryBody.reply_markup.inline_keyboard[1][0].web_app.url, "https://mini.example/app?tab=import&batch=501");
 });
 
 test("Telegram PDF import applies statement signs and merchant rules", async (t) => {

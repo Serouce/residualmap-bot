@@ -2039,9 +2039,21 @@ function buildImportDraftKeyboard(env, batchId, importableCount) {
   row.push({ text: "Отменить", callback_data: `import:cancel:${batchId}` });
   const keyboard = [row];
   if (env.MINI_APP_URL) {
-    keyboard.push([{ text: "Открыть панель", url: env.MINI_APP_URL }]);
+    keyboard.push([{ text: "Открыть панель", web_app: { url: miniAppImportUrl(env.MINI_APP_URL, batchId) } }]);
   }
   return { inline_keyboard: keyboard };
+}
+
+function miniAppImportUrl(baseUrl, batchId) {
+  try {
+    const url = new URL(baseUrl);
+    url.searchParams.set("tab", "import");
+    url.searchParams.set("batch", String(batchId));
+    return url.toString();
+  } catch (error) {
+    const separator = String(baseUrl).includes("?") ? "&" : "?";
+    return `${baseUrl}${separator}tab=import&batch=${encodeURIComponent(String(batchId))}`;
+  }
 }
 
 async function listImportBatches(env, userId, limit) {

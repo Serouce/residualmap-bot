@@ -46,15 +46,43 @@ ${miniAppStyles}
     <section class="view active" id="view-overview" role="tabpanel" aria-labelledby="overview-tab" aria-hidden="false">
       <section class="hero-grid" aria-label="Главные показатели">
         <article class="hero-card primary-panel">
-          <div class="eyebrow" id="periodName">Месяц</div>
+          <div class="summary-topline">
+            <span class="eyebrow">Расходы</span>
+            <span class="period-badge" id="periodName">Месяц</span>
+          </div>
           <h1 id="heroSpend">0 ₸</h1>
           <div class="hero-meta" id="heroMeta">Расходы за выбранный период</div>
+          <div class="overview-actions" aria-label="Быстрые действия">
+            <button class="secondary" type="button" data-open-tab="records"><span class="button-label">Записи</span></button>
+            <button class="secondary" type="button" data-open-tab="import"><span class="button-label">Импорт PDF</span></button>
+          </div>
         </article>
         <aside class="hero-card balance-panel">
-          <div class="side-label">Баланс периода</div>
+          <div class="summary-topline">
+            <span class="side-label">Баланс периода</span>
+            <span class="flow-chip" id="flowState">ожидание</span>
+          </div>
           <div class="side-value" id="netFlow">0 ₸</div>
           <div class="side-note" id="sideNote">Доходы минус личные расходы.</div>
         </aside>
+      </section>
+
+      <section class="overview-dock" aria-label="Рабочие статусы">
+        <button class="dock-item dock-import" type="button" data-open-tab="import">
+          <span class="dock-label">PDF импорт</span>
+          <strong id="importDockValue">Нет черновиков</strong>
+          <span id="importDockMeta">Отправьте выписку боту</span>
+        </button>
+        <button class="dock-item dock-records" type="button" data-open-tab="records">
+          <span class="dock-label">Записи</span>
+          <strong id="recordsDockValue">0</strong>
+          <span id="recordsDockMeta">за период</span>
+        </button>
+        <button class="dock-item dock-debts" type="button" data-open-tab="debts">
+          <span class="dock-label">Долги</span>
+          <strong id="debtsDockValue">Нет</strong>
+          <span id="debtsDockMeta">открытых расчётов</span>
+        </button>
       </section>
 
       <section class="metric-grid" id="metrics" aria-label="Ключевые показатели">

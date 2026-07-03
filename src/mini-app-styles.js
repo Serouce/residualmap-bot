@@ -179,7 +179,7 @@ export const miniAppStyles = `
     }
 
     .app-shell {
-      width: min(920px, 100%);
+      width: min(1040px, 100%);
       margin: 0 auto;
       padding:
         max(8px, env(safe-area-inset-top))
@@ -192,12 +192,11 @@ export const miniAppStyles = `
       position: sticky;
       top: max(0px, env(safe-area-inset-top));
       z-index: 20;
-      margin-bottom: 12px;
-      padding: 10px;
+      margin-bottom: 10px;
+      padding: 8px;
       border: 1px solid color-mix(in srgb, var(--line) 86%, transparent);
       border-radius: var(--radius);
-      background:
-        linear-gradient(180deg, color-mix(in srgb, var(--surface) 96%, transparent), color-mix(in srgb, var(--surface) 90%, var(--bg)));
+      background: color-mix(in srgb, var(--surface) 94%, var(--bg));
       box-shadow: var(--shadow-tight);
       backdrop-filter: blur(18px);
     }
@@ -417,7 +416,8 @@ export const miniAppStyles = `
     }
 
     .hero-grid {
-      margin-bottom: 10px;
+      grid-template-columns: minmax(0, 1fr) minmax(260px, .58fr);
+      margin-bottom: 8px;
     }
 
     .dashboard-grid {
@@ -440,36 +440,159 @@ export const miniAppStyles = `
       padding: 16px;
     }
 
+    .hero-card {
+      min-height: 142px;
+    }
+
     .primary-panel {
       position: relative;
       overflow: hidden;
       background:
-        linear-gradient(140deg, color-mix(in srgb, var(--surface-raised) 96%, transparent), color-mix(in srgb, var(--accent) 8%, var(--surface)) 58%, color-mix(in srgb, var(--accent-2) 8%, var(--surface)));
-      border-color: color-mix(in srgb, var(--accent) 28%, var(--line));
+        linear-gradient(180deg, color-mix(in srgb, var(--surface-raised) 98%, transparent), color-mix(in srgb, var(--accent) 7%, var(--surface)));
+      border-color: color-mix(in srgb, var(--accent) 34%, var(--line));
     }
 
     .primary-panel::after {
       content: "";
       position: absolute;
-      inset: auto 0 0;
-      height: 3px;
-      background: linear-gradient(90deg, var(--accent), var(--accent-2), var(--expense));
-      opacity: .82;
+      inset: 0 auto 0 0;
+      width: 4px;
+      background: var(--accent);
     }
 
     .balance-panel {
       display: grid;
       align-content: start;
       gap: 8px;
-      color: var(--bg);
+      color: var(--text);
       background:
-        linear-gradient(150deg, color-mix(in srgb, var(--text) 96%, var(--accent)), color-mix(in srgb, var(--text) 88%, var(--accent-2)));
-      box-shadow: var(--shadow);
+        linear-gradient(180deg, color-mix(in srgb, var(--surface-raised) 96%, transparent), color-mix(in srgb, var(--income) 9%, var(--surface)));
+      border-color: color-mix(in srgb, var(--income) 30%, var(--line));
     }
 
     .balance-panel .side-label,
     .balance-panel .side-note {
-      color: color-mix(in srgb, var(--bg) 72%, transparent);
+      color: var(--muted);
+    }
+
+    .summary-topline {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+
+    .period-badge,
+    .flow-chip {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 28px;
+      max-width: 100%;
+      padding: 3px 8px;
+      border-radius: 999px;
+      border: 1px solid color-mix(in srgb, var(--line) 78%, transparent);
+      background: color-mix(in srgb, var(--surface-soft) 66%, var(--surface));
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 820;
+      overflow-wrap: anywhere;
+      text-align: center;
+    }
+
+    .flow-chip.income {
+      color: var(--income);
+      border-color: color-mix(in srgb, var(--income) 34%, var(--line));
+      background: color-mix(in srgb, var(--income) 12%, var(--surface));
+    }
+
+    .flow-chip.expense {
+      color: var(--expense);
+      border-color: color-mix(in srgb, var(--expense) 34%, var(--line));
+      background: color-mix(in srgb, var(--expense) 12%, var(--surface));
+    }
+
+    .overview-actions {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 14px;
+    }
+
+    .overview-actions .secondary {
+      min-height: 40px;
+      justify-content: center;
+    }
+
+    .overview-dock {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .dock-item {
+      min-width: 0;
+      min-height: 76px;
+      display: grid;
+      gap: 3px;
+      justify-items: start;
+      align-content: center;
+      padding: 11px 12px;
+      border: 1px solid color-mix(in srgb, var(--line) 86%, transparent);
+      border-left-width: 4px;
+      border-radius: var(--radius);
+      background: color-mix(in srgb, var(--surface-raised) 94%, var(--surface));
+      box-shadow: var(--shadow-tight);
+      text-align: left;
+      transition: transform .16s ease, border-color .16s ease, background-color .16s ease;
+    }
+
+    .dock-item:hover {
+      border-color: color-mix(in srgb, var(--accent) 32%, var(--line));
+      background: color-mix(in srgb, var(--accent) 5%, var(--surface));
+    }
+
+    .dock-item:active {
+      transform: translateY(1px);
+    }
+
+    .dock-import {
+      border-left-color: var(--debt);
+    }
+
+    .dock-records {
+      border-left-color: var(--accent);
+    }
+
+    .dock-debts {
+      border-left-color: var(--support);
+    }
+
+    .dock-label {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 760;
+      text-transform: uppercase;
+    }
+
+    .dock-item strong {
+      max-width: 100%;
+      color: var(--text);
+      font-size: 17px;
+      line-height: 1.16;
+      font-weight: 820;
+      overflow-wrap: anywhere;
+    }
+
+    .dock-item span:last-child {
+      max-width: 100%;
+      color: var(--muted);
+      font-size: 12.5px;
+      line-height: 1.3;
+      font-weight: 680;
+      overflow-wrap: anywhere;
     }
 
     .eyebrow,
@@ -1638,6 +1761,10 @@ export const miniAppStyles = `
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
 
+      .overview-dock {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
       .day-cards {
         grid-template-columns: 1fr;
       }
@@ -1732,8 +1859,20 @@ export const miniAppStyles = `
         padding: 15px;
       }
 
+      .hero-card {
+        min-height: 0;
+      }
+
+      .overview-dock {
+        grid-template-columns: 1fr;
+      }
+
+      .dock-item {
+        min-height: 68px;
+      }
+
       h1 {
-        font-size: 32px;
+        font-size: 30px;
       }
 
       h2 {

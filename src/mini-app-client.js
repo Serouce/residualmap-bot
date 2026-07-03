@@ -764,10 +764,11 @@ export const miniAppClientScript = `
           "<div class='import-title-wrap'><div class='import-title'></div><div class='import-subtitle'></div></div>" +
           "<span class='status-badge status-" + escapeAttr(status) + "'>" + escapeHtml(importStatusLabel(status)) + "</span>" +
         "</div>" +
+        importReviewSteps(status, importable) +
         "<div class='import-facts'>" +
           importFact("Период", importPeriod(batch)) +
           importFact("Строки", String(batch.item_count || 0)) +
-          importFact("Статус", summaryStatus, status === "draft" && importable > 0 ? "debt" : "") +
+          importFact("Статус", summaryStatus, status === "draft" && importable > 0 ? "debt" : status) +
           importFact("К записи", String(importable), importable > 0 ? "debt" : "") +
           importFact("Дубли", String(duplicateCount), duplicateCount > 0 ? "duplicate" : "") +
           importFact("Пропущено", String(skippedCount), skippedCount > 0 ? "skipped" : "") +
@@ -790,8 +791,25 @@ export const miniAppClientScript = `
       return element;
     }
 
+    function importReviewSteps(status, importable) {
+      const steps = [
+        ["Черновик", "Файл разобран"],
+        ["Проверка", status === "draft" ? (importable > 0 ? "Готово к решению" : "Нет строк к записи") : "Решение принято"],
+        ["Запись", status === "confirmed" ? "Внесено в базу" : status === "cancelled" ? "Отменено" : "После подтверждения"]
+      ];
+      return "<div class='import-review-steps' aria-label='Этапы импорта'>" + steps.map(function(step, index) {
+        let state = "pending";
+        if (status === "confirmed") state = "done";
+        else if (status === "cancelled") state = index < 2 ? "done" : "cancelled";
+        else if (status === "failed") state = index === 1 ? "failed" : index === 0 ? "done" : "pending";
+        else if (status === "draft") state = index === 0 ? "done" : index === 1 ? "active" : "pending";
+        return "<div class='import-step step-" + escapeAttr(state) + "'><span>" + escapeHtml(step[0]) + "</span><small>" + escapeHtml(step[1]) + "</small></div>";
+      }).join("") + "</div>";
+    }
+
     function importFact(label, value, tone) {
-      return "<div class='import-fact'><div class='label'>" + escapeHtml(label) + "</div><div class='value" + (tone ? " " + escapeAttr(tone) : "") + "'>" + escapeHtml(value || "0") + "</div></div>";
+      const factTone = tone ? " fact-" + escapeAttr(tone) : "";
+      return "<div class='import-fact" + factTone + "'><div class='label'>" + escapeHtml(label) + "</div><div class='value" + (tone ? " " + escapeAttr(tone) : "") + "'>" + escapeHtml(value || "0") + "</div></div>";
     }
 
     function importDecisionSummary(batch, importable, duplicateCount, skippedCount) {

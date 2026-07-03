@@ -67,6 +67,8 @@ ${miniAppStyles}
         </aside>
       </section>
 
+      <section class="notice-strip" id="importAttention" hidden></section>
+
       <section class="overview-dock" aria-label="Рабочие статусы">
         <button class="dock-item dock-import" type="button" data-open-tab="import">
           <span class="dock-label">PDF импорт</span>
@@ -91,8 +93,6 @@ ${miniAppStyles}
         <div class="skeleton"></div>
         <div class="skeleton"></div>
       </section>
-
-      <section class="notice-strip" id="importAttention" hidden></section>
 
       <section class="dashboard-grid">
         <section class="panel wide">

@@ -22,7 +22,7 @@ ${miniAppStyles}
           <div class="brand-copy">
             <div class="brand-title">ResidualMap</div>
             <div class="brand-meta" id="profile">Загрузка данных...</div>
-            <div class="sync-status" id="syncStatus">Подготовка панели</div>
+            <div class="sync-status" id="syncStatus" role="status" aria-live="polite">Подготовка панели</div>
           </div>
         </div>
         <button class="icon-button" id="refresh" type="button" title="Обновить" aria-label="Обновить данные">↻</button>
@@ -36,14 +36,14 @@ ${miniAppStyles}
       </nav>
 
       <nav class="tabs" id="tabs" role="tablist" aria-label="Разделы Mini App">
-        <button id="overview-tab" data-tab="overview" class="active" type="button" role="tab" aria-selected="true" aria-controls="view-overview">Обзор</button>
-        <button id="records-tab" data-tab="records" type="button" role="tab" aria-selected="false" aria-controls="view-records">Записи</button>
-        <button id="import-tab" data-tab="import" type="button" role="tab" aria-selected="false" aria-controls="view-import">Импорт</button>
-        <button id="debts-tab" data-tab="debts" type="button" role="tab" aria-selected="false" aria-controls="view-debts">Долги</button>
+        <button id="overview-tab" data-tab="overview" class="active" type="button" role="tab" aria-selected="true" aria-controls="view-overview" tabindex="0">Обзор</button>
+        <button id="records-tab" data-tab="records" type="button" role="tab" aria-selected="false" aria-controls="view-records" tabindex="-1">Записи</button>
+        <button id="import-tab" data-tab="import" type="button" role="tab" aria-selected="false" aria-controls="view-import" tabindex="-1">Импорт</button>
+        <button id="debts-tab" data-tab="debts" type="button" role="tab" aria-selected="false" aria-controls="view-debts" tabindex="-1">Долги</button>
       </nav>
     </header>
 
-    <section class="view active" id="view-overview" role="tabpanel" aria-labelledby="overview-tab">
+    <section class="view active" id="view-overview" role="tabpanel" aria-labelledby="overview-tab" aria-hidden="false">
       <section class="hero-grid" aria-label="Главные показатели">
         <article class="hero-card primary-panel">
           <div class="eyebrow" id="periodName">Месяц</div>
@@ -130,7 +130,7 @@ ${miniAppStyles}
       </section>
     </section>
 
-    <section class="view" id="view-records" role="tabpanel" aria-labelledby="records-tab">
+    <section class="view" id="view-records" role="tabpanel" aria-labelledby="records-tab" aria-hidden="true" hidden>
       <section class="panel records-panel">
         <div class="panel-head records-head">
           <div>
@@ -178,6 +178,8 @@ ${miniAppStyles}
           </label>
         </div>
 
+        <div class="filter-chips" id="recordFilterChips" aria-live="polite"></div>
+
         <div class="records-canvas view-feed" id="recordsCanvas" aria-live="polite">
           <div class="skeleton"></div>
           <div class="skeleton"></div>
@@ -186,18 +188,25 @@ ${miniAppStyles}
       </section>
     </section>
 
-    <section class="view" id="view-import" role="tabpanel" aria-labelledby="import-tab">
+    <section class="view" id="view-import" role="tabpanel" aria-labelledby="import-tab" aria-hidden="true" hidden>
       <section class="panel import-panel">
         <div class="panel-head records-head">
           <div>
             <h2>Импорт</h2>
-            <p class="caption">Черновики PDF-выписок, дубли и строки перед записью</p>
+            <p class="caption">Черновики PDF-выписок, статусы строк и история решений</p>
           </div>
           <span class="pill" id="importCount">0 импортов</span>
         </div>
 
         <div class="import-toolbar">
-          <button class="secondary" id="refreshImports" type="button">Обновить импорт</button>
+          <button class="secondary" id="refreshImports" type="button" data-loading-label="Обновление" aria-label="Обновить импорт"><span class="button-label">Обновить импорт</span></button>
+        </div>
+
+        <div class="quick-filters import-filters" id="importFilters" aria-label="Фильтр импорта">
+          <button data-import-filter="attention" data-label="Требует решения" class="active" type="button" aria-pressed="true">Требует решения</button>
+          <button data-import-filter="history" data-label="История" type="button" aria-pressed="false">История</button>
+          <button data-import-filter="duplicates" data-label="Дубли" type="button" aria-pressed="false">Дубли</button>
+          <button data-import-filter="skipped" data-label="Пропуски" type="button" aria-pressed="false">Пропуски</button>
         </div>
 
         <div class="imports-canvas" id="importsCanvas" aria-live="polite">
@@ -207,7 +216,7 @@ ${miniAppStyles}
       </section>
     </section>
 
-    <section class="view" id="view-debts" role="tabpanel" aria-labelledby="debts-tab">
+    <section class="view" id="view-debts" role="tabpanel" aria-labelledby="debts-tab" aria-hidden="true" hidden>
       <section class="panel">
         <div class="panel-head">
           <div>
@@ -221,7 +230,7 @@ ${miniAppStyles}
   </main>
 
   <div class="sheet-backdrop" id="sheetBackdrop">
-    <section class="sheet" role="dialog" aria-modal="true" aria-label="Детали записи">
+    <section class="sheet" role="dialog" aria-modal="true" aria-label="Детали записи" aria-labelledby="sheetTitle" aria-describedby="sheetSubtitle">
       <div class="sheet-head">
         <div>
           <h2 id="sheetTitle">Запись</h2>

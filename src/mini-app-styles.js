@@ -17,6 +17,9 @@ export const miniAppStyles = `
       --income: #157a5c;
       --debt: #91651c;
       --support: #6d5cae;
+      --warning: #ad5f18;
+      --duplicate: #5f5aa6;
+      --skipped: #647083;
       --category-a: #315d86;
       --category-b: #8b4f67;
       --category-c: #9a6a2d;
@@ -46,6 +49,9 @@ export const miniAppStyles = `
       --income: #82d8b5;
       --debt: #e0b762;
       --support: #b4a6f2;
+      --warning: #f0b36d;
+      --duplicate: #b8b3ff;
+      --skipped: #b6bfca;
       --category-a: #9cb9e5;
       --category-b: #d7a3b8;
       --category-c: #e1bc83;
@@ -74,6 +80,9 @@ export const miniAppStyles = `
         --income: #82d8b5;
         --debt: #e0b762;
         --support: #b4a6f2;
+        --warning: #f0b36d;
+        --duplicate: #b8b3ff;
+        --skipped: #b6bfca;
         --category-a: #9cb9e5;
         --category-b: #d7a3b8;
         --category-c: #e1bc83;
@@ -163,6 +172,10 @@ export const miniAppStyles = `
 
     svg text {
       font-family: inherit;
+    }
+
+    [hidden] {
+      display: none !important;
     }
 
     .app-shell {
@@ -739,6 +752,14 @@ export const miniAppStyles = `
       color: var(--support);
     }
 
+    .duplicate {
+      color: var(--duplicate);
+    }
+
+    .skipped {
+      color: var(--skipped);
+    }
+
     .pill {
       display: inline-flex;
       align-items: center;
@@ -813,6 +834,16 @@ export const miniAppStyles = `
       gap: 10px;
     }
 
+    .import-filters {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      margin-bottom: 10px;
+    }
+
+    .import-filters button {
+      padding-inline: 5px;
+      overflow-wrap: anywhere;
+    }
+
     .records-toolbar {
       display: grid;
       grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr) auto;
@@ -847,6 +878,37 @@ export const miniAppStyles = `
       margin-bottom: 12px;
     }
 
+    .filter-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+      min-height: 28px;
+      margin: -4px 0 12px;
+    }
+
+    .filter-chip,
+    .filter-reset {
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      max-width: 100%;
+      padding: 3px 8px;
+      border-radius: 999px;
+      border: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
+      background: color-mix(in srgb, var(--surface-soft) 62%, var(--surface));
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 740;
+      overflow-wrap: anywhere;
+    }
+
+    .filter-reset {
+      min-height: var(--tap);
+      color: var(--accent);
+      background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+    }
+
     .field-wrap {
       display: grid;
       gap: 5px;
@@ -869,7 +931,7 @@ export const miniAppStyles = `
     }
 
     .search-wrap .field {
-      padding-right: 44px;
+      padding-right: 52px;
     }
 
     textarea.field {
@@ -879,10 +941,10 @@ export const miniAppStyles = `
 
     .clear-search {
       position: absolute;
-      right: 5px;
-      bottom: 5px;
-      width: 34px;
-      height: 34px;
+      right: 0;
+      bottom: 0;
+      width: var(--tap);
+      height: var(--tap);
       display: grid;
       place-items: center;
       border-radius: var(--radius);
@@ -911,12 +973,13 @@ export const miniAppStyles = `
 
     .import-card {
       display: grid;
-      gap: 12px;
-      padding: 13px;
+      gap: 10px;
+      padding: 12px;
     }
 
     .import-card.import-draft {
       border-color: color-mix(in srgb, var(--debt) 34%, var(--line));
+      background: color-mix(in srgb, var(--debt) 4%, var(--surface));
     }
 
     .import-card.import-confirmed {
@@ -925,6 +988,15 @@ export const miniAppStyles = `
 
     .import-card.import-cancelled {
       opacity: .84;
+    }
+
+    .import-card.import-failed {
+      border-color: color-mix(in srgb, var(--expense) 36%, var(--line));
+    }
+
+    .import-card.is-target {
+      outline: 3px solid color-mix(in srgb, var(--accent) 34%, transparent);
+      outline-offset: 2px;
     }
 
     .record-card:hover,
@@ -1013,6 +1085,7 @@ export const miniAppStyles = `
       font-size: 16px;
       font-weight: 800;
       overflow-wrap: anywhere;
+      word-break: break-word;
     }
 
     .import-subtitle {
@@ -1028,6 +1101,7 @@ export const miniAppStyles = `
       align-items: center;
       justify-content: center;
       min-height: 28px;
+      max-width: 100%;
       padding: 4px 8px;
       border-radius: 999px;
       border: 1px solid color-mix(in srgb, var(--line) 78%, transparent);
@@ -1035,7 +1109,9 @@ export const miniAppStyles = `
       color: var(--muted);
       font-size: 12px;
       font-weight: 800;
-      white-space: nowrap;
+      overflow-wrap: anywhere;
+      white-space: normal;
+      text-align: center;
     }
 
     .status-draft {
@@ -1051,23 +1127,39 @@ export const miniAppStyles = `
       color: var(--income);
     }
 
-    .status-cancelled,
-    .status-skipped,
     .status-duplicate {
+      border-color: color-mix(in srgb, var(--duplicate) 36%, var(--line));
+      background: color-mix(in srgb, var(--duplicate) 12%, var(--surface));
+      color: var(--duplicate);
+    }
+
+    .status-skipped {
+      border-color: color-mix(in srgb, var(--skipped) 34%, var(--line));
+      background: color-mix(in srgb, var(--skipped) 10%, var(--surface));
+      color: var(--skipped);
+    }
+
+    .status-cancelled {
       border-color: color-mix(in srgb, var(--muted) 30%, var(--line));
       background: color-mix(in srgb, var(--muted) 10%, var(--surface));
       color: var(--muted);
     }
 
+    .status-failed {
+      border-color: color-mix(in srgb, var(--expense) 34%, var(--line));
+      background: color-mix(in srgb, var(--expense) 12%, var(--surface));
+      color: var(--expense);
+    }
+
     .import-facts {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 8px;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 6px;
     }
 
     .import-fact {
       min-width: 0;
-      padding: 9px;
+      padding: 8px;
       border: 1px solid color-mix(in srgb, var(--line) 78%, transparent);
       border-radius: var(--radius);
       background: color-mix(in srgb, var(--surface-soft) 52%, var(--surface));
@@ -1076,20 +1168,92 @@ export const miniAppStyles = `
     .import-fact .value {
       margin-top: 2px;
       color: var(--text);
-      font-size: 14px;
+      font-size: 13.5px;
       font-weight: 800;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+
+    .import-decision-summary,
+    .import-notice,
+    .import-history-summary,
+    .import-preview-head {
+      border: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
+      border-radius: var(--radius);
+      background: color-mix(in srgb, var(--surface-soft) 48%, var(--surface));
+    }
+
+    .import-decision-summary {
+      display: grid;
+      gap: 2px;
+      padding: 9px 10px;
+      border-left: 4px solid var(--debt);
+    }
+
+    .import-decision-summary strong {
+      color: var(--text);
+      font-size: 14px;
+      line-height: 1.25;
       overflow-wrap: anywhere;
     }
 
-    .import-warning {
-      padding: 10px 11px;
-      border: 1px solid color-mix(in srgb, var(--debt) 32%, var(--line));
-      border-radius: var(--radius);
-      background: color-mix(in srgb, var(--debt) 10%, var(--surface));
-      color: var(--debt);
-      font-size: 13px;
+    .import-decision-summary span {
+      color: var(--muted);
+      font-size: 12.5px;
+      line-height: 1.35;
+      font-weight: 680;
+      overflow-wrap: anywhere;
+    }
+
+    .import-notices {
+      display: grid;
+      gap: 6px;
+    }
+
+    .import-notice {
+      display: grid;
+      grid-template-columns: minmax(72px, auto) minmax(0, 1fr);
+      gap: 8px;
+      align-items: start;
+      padding: 8px 10px;
+      border-left: 4px solid var(--warning);
+      color: var(--warning);
+      font-size: 12.5px;
       font-weight: 720;
       overflow-wrap: anywhere;
+    }
+
+    .import-notice span {
+      font-weight: 840;
+    }
+
+    .import-notice p {
+      color: var(--text);
+      font-weight: 680;
+      overflow-wrap: anywhere;
+    }
+
+    .notice-duplicate {
+      border-left-color: var(--duplicate);
+      color: var(--duplicate);
+    }
+
+    .notice-skipped {
+      border-left-color: var(--skipped);
+      color: var(--skipped);
+    }
+
+    .notice-truncated,
+    .notice-warning {
+      border-left-color: var(--warning);
+      color: var(--warning);
+    }
+
+    .import-inline-error {
+      min-height: 0;
+      display: block;
+      padding: 9px 10px;
+      text-align: left;
     }
 
     .import-preview {
@@ -1178,8 +1342,9 @@ export const miniAppStyles = `
       display: inline-flex;
       align-items: center;
       gap: 5px;
-      min-height: 28px;
-      padding: 0;
+      min-height: var(--tap);
+      max-width: 100%;
+      padding: 0 4px;
       background: transparent;
       color: inherit;
       font-size: inherit;
@@ -1401,10 +1566,43 @@ export const miniAppStyles = `
     .primary,
     .secondary,
     .danger {
+      position: relative;
+      display: inline-grid;
+      place-items: center;
       min-height: var(--tap);
+      min-width: 0;
+      padding: 0 12px;
       border-radius: var(--radius);
       font-weight: 800;
+      overflow: hidden;
       transition: transform .16s ease, filter .16s ease;
+    }
+
+    .button-label {
+      min-width: 0;
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .primary.is-loading .button-label,
+    .secondary.is-loading .button-label,
+    .danger.is-loading .button-label {
+      opacity: 0;
+    }
+
+    .primary.is-loading::after,
+    .secondary.is-loading::after,
+    .danger.is-loading::after {
+      content: attr(data-loading-label);
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: 0 12px;
+      color: inherit;
+      white-space: nowrap;
     }
 
     .primary {
@@ -1497,14 +1695,20 @@ export const miniAppStyles = `
       }
 
       .sync-status {
-        display: none;
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+        clip-path: inset(50%);
+        white-space: nowrap;
       }
 
       .brand-mark,
       .icon-button {
-        width: 40px;
-        height: 40px;
-        min-width: 40px;
+        width: var(--tap);
+        height: var(--tap);
+        min-width: var(--tap);
       }
 
       .segments,
@@ -1518,7 +1722,7 @@ export const miniAppStyles = `
       .tabs button,
       .quick-filters button,
       .view-switch button {
-        min-height: 40px;
+        min-height: var(--tap);
         padding: 7px 4px;
         font-size: 13.5px;
       }
@@ -1589,6 +1793,10 @@ export const miniAppStyles = `
 
       .status-badge {
         justify-self: start;
+      }
+
+      .import-notice {
+        grid-template-columns: 1fr;
       }
 
       .import-facts {

@@ -1,47 +1,54 @@
 export const miniAppStyles = `
     :root {
       color-scheme: light dark;
-      --bg: var(--tg-theme-bg-color, #f4f6f8);
+      --bg: var(--tg-theme-bg-color, #f2f4f7);
+      --bg-elevated: #f7f9fb;
       --surface: var(--tg-theme-secondary-bg-color, #ffffff);
       --surface-raised: #ffffff;
-      --surface-soft: #eef2f6;
-      --surface-tint: #f8fafc;
-      --text: var(--tg-theme-text-color, #101722);
-      --muted: var(--tg-theme-hint-color, #667085);
-      --subtle: #7b8494;
-      --line: var(--tg-theme-section-separator-color, rgba(16, 23, 34, .12));
-      --accent: var(--tg-theme-button-color, #116b5f);
-      --accent-2: #315d86;
+      --surface-panel: #fbfcfd;
+      --surface-soft: #eef1f5;
+      --surface-tint: #f7f9fc;
+      --text: var(--tg-theme-text-color, #0d141f);
+      --muted: var(--tg-theme-hint-color, #637083);
+      --subtle: #8791a0;
+      --line: var(--tg-theme-section-separator-color, rgba(13, 20, 31, .105));
+      --line-strong: rgba(13, 20, 31, .17);
+      --accent: var(--tg-theme-button-color, #0d6b61);
+      --accent-2: #274f76;
       --accent-text: var(--tg-theme-button-text-color, #ffffff);
-      --expense: #b43e57;
-      --income: #157a5c;
-      --debt: #91651c;
-      --support: #6d5cae;
-      --warning: #ad5f18;
-      --duplicate: #5f5aa6;
+      --expense: #b33b54;
+      --income: #14765a;
+      --debt: #956518;
+      --support: #6653a8;
+      --warning: #a45d17;
+      --duplicate: #5753a1;
       --skipped: #647083;
       --category-a: #315d86;
       --category-b: #8b4f67;
       --category-c: #9a6a2d;
       --category-d: #43757b;
       --category-e: #5b6d91;
-      --shadow: 0 18px 46px rgba(15, 23, 42, .09);
-      --shadow-soft: 0 8px 24px rgba(15, 23, 42, .07);
-      --shadow-tight: 0 1px 2px rgba(15, 23, 42, .06), 0 10px 30px rgba(15, 23, 42, .06);
+      --shadow: 0 22px 56px rgba(15, 23, 42, .105);
+      --shadow-soft: 0 8px 22px rgba(15, 23, 42, .055);
+      --shadow-tight: 0 1px 1px rgba(15, 23, 42, .045), 0 10px 28px rgba(15, 23, 42, .045);
+      --hairline: color-mix(in srgb, var(--line) 78%, transparent);
       --radius: 8px;
       --tap: 44px;
     }
 
     :root[data-scheme="dark"] {
       --bg: var(--tg-theme-bg-color, #0d1117);
-      --surface: var(--tg-theme-secondary-bg-color, #151b24);
-      --surface-raised: #1b2330;
-      --surface-soft: #212a36;
+      --bg-elevated: #101620;
+      --surface: var(--tg-theme-secondary-bg-color, #151d28);
+      --surface-raised: #202a38;
+      --surface-panel: #1a2431;
+      --surface-soft: #263140;
       --surface-tint: #111821;
       --text: var(--tg-theme-text-color, #f6f8fb);
-      --muted: var(--tg-theme-hint-color, #aab4c2);
-      --subtle: #c2cad5;
-      --line: var(--tg-theme-section-separator-color, rgba(255, 255, 255, .13));
+      --muted: var(--tg-theme-hint-color, #bac4d1);
+      --subtle: #d0d7e1;
+      --line: var(--tg-theme-section-separator-color, rgba(255, 255, 255, .16));
+      --line-strong: rgba(255, 255, 255, .24);
       --accent: var(--tg-theme-button-color, #69beb0);
       --accent-2: #9cb9e5;
       --accent-text: var(--tg-theme-button-text-color, #061210);
@@ -57,22 +64,26 @@ export const miniAppStyles = `
       --category-c: #e1bc83;
       --category-d: #9bcbd1;
       --category-e: #aeb9d6;
-      --shadow: 0 20px 52px rgba(0, 0, 0, .32);
-      --shadow-soft: 0 12px 30px rgba(0, 0, 0, .24);
-      --shadow-tight: 0 1px 2px rgba(0, 0, 0, .18), 0 14px 34px rgba(0, 0, 0, .22);
+      --shadow: 0 20px 52px rgba(0, 0, 0, .34);
+      --shadow-soft: 0 12px 30px rgba(0, 0, 0, .22);
+      --shadow-tight: 0 1px 2px rgba(0, 0, 0, .18), 0 14px 34px rgba(0, 0, 0, .18);
+      --hairline: color-mix(in srgb, var(--line) 74%, transparent);
     }
 
     @media (prefers-color-scheme: dark) {
       :root:not([data-scheme="light"]) {
         --bg: var(--tg-theme-bg-color, #0d1117);
-        --surface: var(--tg-theme-secondary-bg-color, #151b24);
-        --surface-raised: #1b2330;
-        --surface-soft: #212a36;
+        --bg-elevated: #101620;
+        --surface: var(--tg-theme-secondary-bg-color, #151d28);
+        --surface-raised: #202a38;
+        --surface-panel: #1a2431;
+        --surface-soft: #263140;
         --surface-tint: #111821;
         --text: var(--tg-theme-text-color, #f6f8fb);
-        --muted: var(--tg-theme-hint-color, #aab4c2);
-        --subtle: #c2cad5;
-        --line: var(--tg-theme-section-separator-color, rgba(255, 255, 255, .13));
+        --muted: var(--tg-theme-hint-color, #bac4d1);
+        --subtle: #d0d7e1;
+        --line: var(--tg-theme-section-separator-color, rgba(255, 255, 255, .16));
+        --line-strong: rgba(255, 255, 255, .24);
         --accent: var(--tg-theme-button-color, #69beb0);
         --accent-2: #9cb9e5;
         --accent-text: var(--tg-theme-button-text-color, #061210);
@@ -91,6 +102,7 @@ export const miniAppStyles = `
         --shadow: 0 20px 52px rgba(0, 0, 0, .32);
         --shadow-soft: 0 12px 30px rgba(0, 0, 0, .24);
         --shadow-tight: 0 1px 2px rgba(0, 0, 0, .18), 0 14px 34px rgba(0, 0, 0, .22);
+        --hairline: color-mix(in srgb, var(--line) 74%, transparent);
       }
     }
 
@@ -107,11 +119,13 @@ export const miniAppStyles = `
       margin: 0;
       min-height: 100vh;
       color: var(--text);
-      background: var(--bg);
+      background:
+        linear-gradient(180deg, var(--bg-elevated) 0, var(--bg) 280px);
       font: 16px/1.45 ui-sans-serif, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Arial, sans-serif;
       font-variant-numeric: tabular-nums;
       text-rendering: optimizeLegibility;
       -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
     }
 
     button,
@@ -150,17 +164,17 @@ export const miniAppStyles = `
 
     h1 {
       margin-top: 8px;
-      font-size: 34px;
-      line-height: 1.05;
-      font-weight: 790;
+      font-size: 36px;
+      line-height: 1.02;
+      font-weight: 850;
       letter-spacing: 0;
       overflow-wrap: anywhere;
     }
 
     h2 {
-      font-size: 21px;
+      font-size: 20px;
       line-height: 1.2;
-      font-weight: 780;
+      font-weight: 820;
       letter-spacing: 0;
     }
 
@@ -194,11 +208,11 @@ export const miniAppStyles = `
       z-index: 20;
       margin-bottom: 10px;
       padding: 8px;
-      border: 1px solid color-mix(in srgb, var(--line) 86%, transparent);
+      border: 1px solid var(--hairline);
       border-radius: var(--radius);
-      background: color-mix(in srgb, var(--surface) 94%, var(--bg));
-      box-shadow: var(--shadow-tight);
-      backdrop-filter: blur(18px);
+      background: color-mix(in srgb, var(--surface) 88%, var(--bg));
+      box-shadow: 0 1px 0 color-mix(in srgb, var(--surface-raised) 70%, transparent), var(--shadow-tight);
+      backdrop-filter: blur(20px);
     }
 
     .brand-row,
@@ -230,9 +244,8 @@ export const miniAppStyles = `
       flex: 0 0 auto;
       border-radius: var(--radius);
       color: var(--accent-text);
-      background:
-        linear-gradient(145deg, color-mix(in srgb, var(--accent) 86%, #ffffff), color-mix(in srgb, var(--accent-2) 78%, #000000));
-      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .22), 0 12px 24px color-mix(in srgb, var(--accent) 18%, transparent);
+      background: var(--accent);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .18), 0 10px 24px color-mix(in srgb, var(--accent) 20%, transparent);
       font-size: 18px;
       font-weight: 820;
     }
@@ -281,8 +294,7 @@ export const miniAppStyles = `
       place-items: center;
       border: 1px solid color-mix(in srgb, var(--line) 88%, transparent);
       border-radius: var(--radius);
-      background:
-        linear-gradient(180deg, color-mix(in srgb, var(--surface-raised) 96%, #ffffff), color-mix(in srgb, var(--surface-soft) 72%, var(--surface)));
+      background: color-mix(in srgb, var(--surface-raised) 86%, var(--surface));
       box-shadow: var(--shadow-soft);
       font-size: 20px;
       line-height: 1;
@@ -306,12 +318,14 @@ export const miniAppStyles = `
     .quick-filters,
     .view-switch {
       display: grid;
+      min-width: 0;
+      width: 100%;
       gap: 5px;
       padding: 4px;
-      border: 1px solid color-mix(in srgb, var(--line) 90%, transparent);
+      border: 1px solid var(--hairline);
       border-radius: var(--radius);
-      background: color-mix(in srgb, var(--surface-soft) 70%, var(--surface));
-      box-shadow: inset 0 1px 0 color-mix(in srgb, var(--surface-raised) 80%, transparent);
+      background: color-mix(in srgb, var(--surface-soft) 58%, var(--surface));
+      box-shadow: inset 0 1px 0 color-mix(in srgb, var(--surface-raised) 66%, transparent);
     }
 
     .segments {
@@ -335,14 +349,18 @@ export const miniAppStyles = `
     .tabs button,
     .quick-filters button,
     .view-switch button {
+      min-width: 0;
       min-height: var(--tap);
       border: 1px solid transparent;
       border-radius: var(--radius);
       background: transparent;
       color: var(--muted);
       font-size: 14.5px;
-      font-weight: 730;
+      font-weight: 760;
       letter-spacing: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
       transition: background-color .16s ease, color .16s ease, border-color .16s ease, box-shadow .16s ease, transform .16s ease;
     }
 
@@ -362,8 +380,8 @@ export const miniAppStyles = `
     .view-switch button.active {
       background: var(--surface-raised);
       color: var(--text);
-      border-color: color-mix(in srgb, var(--line) 84%, transparent);
-      box-shadow: 0 8px 22px rgba(15, 23, 42, .08);
+      border-color: color-mix(in srgb, var(--line-strong) 74%, transparent);
+      box-shadow: 0 6px 18px rgba(15, 23, 42, .07);
     }
 
     .segments button.active {
@@ -373,7 +391,7 @@ export const miniAppStyles = `
 
     .tabs button.active {
       background: var(--text);
-      color: var(--bg);
+      color: var(--surface);
       border-color: var(--text);
     }
 
@@ -417,7 +435,7 @@ export const miniAppStyles = `
 
     .hero-grid {
       grid-template-columns: minmax(0, 1fr) minmax(260px, .58fr);
-      margin-bottom: 8px;
+      margin-bottom: 10px;
     }
 
     .dashboard-grid {
@@ -428,10 +446,9 @@ export const miniAppStyles = `
     .hero-card,
     .metric-card {
       min-width: 0;
-      border: 1px solid color-mix(in srgb, var(--line) 88%, transparent);
+      border: 1px solid var(--hairline);
       border-radius: var(--radius);
-      background:
-        linear-gradient(180deg, color-mix(in srgb, var(--surface-raised) 98%, transparent), color-mix(in srgb, var(--surface) 94%, var(--surface-tint)));
+      background: color-mix(in srgb, var(--surface-panel) 86%, var(--surface));
       box-shadow: var(--shadow-tight);
     }
 
@@ -441,15 +458,15 @@ export const miniAppStyles = `
     }
 
     .hero-card {
-      min-height: 142px;
+      min-height: 136px;
     }
 
     .primary-panel {
       position: relative;
       overflow: hidden;
-      background:
-        linear-gradient(180deg, color-mix(in srgb, var(--surface-raised) 98%, transparent), color-mix(in srgb, var(--accent) 7%, var(--surface)));
-      border-color: color-mix(in srgb, var(--accent) 34%, var(--line));
+      background: color-mix(in srgb, var(--surface-raised) 88%, var(--accent) 5%);
+      border-color: color-mix(in srgb, var(--accent) 26%, var(--line));
+      box-shadow: var(--shadow);
     }
 
     .primary-panel::after {
@@ -457,7 +474,7 @@ export const miniAppStyles = `
       position: absolute;
       inset: 0 auto 0 0;
       width: 4px;
-      background: var(--accent);
+      background: linear-gradient(180deg, var(--accent), color-mix(in srgb, var(--accent-2) 82%, var(--accent)));
     }
 
     .balance-panel {
@@ -465,9 +482,8 @@ export const miniAppStyles = `
       align-content: start;
       gap: 8px;
       color: var(--text);
-      background:
-        linear-gradient(180deg, color-mix(in srgb, var(--surface-raised) 96%, transparent), color-mix(in srgb, var(--income) 9%, var(--surface)));
-      border-color: color-mix(in srgb, var(--income) 30%, var(--line));
+      background: color-mix(in srgb, var(--surface-panel) 88%, var(--income) 4%);
+      border-color: color-mix(in srgb, var(--income) 24%, var(--line));
     }
 
     .balance-panel .side-label,
@@ -528,23 +544,23 @@ export const miniAppStyles = `
     .overview-dock {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 8px;
-      margin-bottom: 10px;
+      gap: 7px;
+      margin-bottom: 9px;
     }
 
     .dock-item {
       min-width: 0;
-      min-height: 76px;
+      min-height: 70px;
       display: grid;
       gap: 3px;
       justify-items: start;
       align-content: center;
-      padding: 11px 12px;
-      border: 1px solid color-mix(in srgb, var(--line) 86%, transparent);
-      border-left-width: 4px;
+      padding: 10px 11px;
+      border: 1px solid var(--hairline);
+      border-top-width: 3px;
       border-radius: var(--radius);
-      background: color-mix(in srgb, var(--surface-raised) 94%, var(--surface));
-      box-shadow: var(--shadow-tight);
+      background: color-mix(in srgb, var(--surface-panel) 76%, var(--surface));
+      box-shadow: none;
       text-align: left;
       transition: transform .16s ease, border-color .16s ease, background-color .16s ease;
     }
@@ -559,20 +575,20 @@ export const miniAppStyles = `
     }
 
     .dock-import {
-      border-left-color: var(--debt);
+      border-top-color: var(--debt);
     }
 
     .dock-records {
-      border-left-color: var(--accent);
+      border-top-color: var(--accent);
     }
 
     .dock-debts {
-      border-left-color: var(--support);
+      border-top-color: var(--support);
     }
 
     .dock-label {
       color: var(--muted);
-      font-size: 12px;
+      font-size: 11.5px;
       font-weight: 760;
       text-transform: uppercase;
     }
@@ -580,7 +596,7 @@ export const miniAppStyles = `
     .dock-item strong {
       max-width: 100%;
       color: var(--text);
-      font-size: 17px;
+      font-size: 16px;
       line-height: 1.16;
       font-weight: 820;
       overflow-wrap: anywhere;
@@ -625,7 +641,7 @@ export const miniAppStyles = `
     .metric-grid {
       display: grid;
       grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 10px;
+      gap: 8px;
       margin-bottom: 10px;
     }
 
@@ -635,17 +651,17 @@ export const miniAppStyles = `
       justify-content: space-between;
       gap: 12px;
       margin-bottom: 10px;
-      padding: 12px 13px;
-      border: 1px solid color-mix(in srgb, var(--debt) 34%, var(--line));
+      padding: 13px;
+      border: 1px solid color-mix(in srgb, var(--debt) 28%, var(--line));
       border-radius: var(--radius);
-      background: color-mix(in srgb, var(--debt) 10%, var(--surface));
-      box-shadow: var(--shadow-soft);
+      background: color-mix(in srgb, var(--surface-raised) 82%, var(--debt) 5%);
+      box-shadow: var(--shadow-tight);
     }
 
     .notice-title {
       color: var(--text);
-      font-size: 15px;
-      font-weight: 790;
+      font-size: 16px;
+      font-weight: 840;
     }
 
     .notice-meta {
@@ -666,14 +682,16 @@ export const miniAppStyles = `
       grid-template-columns: minmax(150px, .32fr) minmax(0, 1fr);
       align-items: stretch;
       gap: 10px;
-      border-color: color-mix(in srgb, var(--accent) 28%, var(--line));
-      background: color-mix(in srgb, var(--accent) 7%, var(--surface));
+      border-color: color-mix(in srgb, var(--accent) 32%, var(--line));
+      background: color-mix(in srgb, var(--surface-raised) 86%, var(--accent) 6%);
+      box-shadow: var(--shadow);
     }
 
     .review-queue.is-clear {
       grid-template-columns: 1fr;
-      border-color: color-mix(in srgb, var(--income) 28%, var(--line));
-      background: color-mix(in srgb, var(--income) 7%, var(--surface));
+      border-color: color-mix(in srgb, var(--income) 24%, var(--line));
+      background: color-mix(in srgb, var(--surface-raised) 88%, var(--income) 5%);
+      box-shadow: var(--shadow-tight);
     }
 
     .review-queue-head {
@@ -696,13 +714,13 @@ export const miniAppStyles = `
       grid-template-columns: minmax(0, 1fr) auto;
       gap: 10px;
       align-items: center;
-      padding: 9px 10px;
+      padding: 10px 11px;
       border: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
-      border-left-width: 4px;
+      border-left-width: 3px;
       border-radius: var(--radius);
-      background: color-mix(in srgb, var(--surface-raised) 92%, var(--surface));
+      background: color-mix(in srgb, var(--surface-panel) 84%, var(--surface));
       text-align: left;
-      box-shadow: var(--shadow-soft);
+      box-shadow: none;
       transition: transform .16s ease, background-color .16s ease, border-color .16s ease;
     }
 
@@ -738,9 +756,9 @@ export const miniAppStyles = `
 
     .review-item strong {
       color: var(--text);
-      font-size: 14px;
+      font-size: 14.5px;
       line-height: 1.25;
-      font-weight: 820;
+      font-weight: 840;
       overflow-wrap: anywhere;
     }
 
@@ -760,8 +778,10 @@ export const miniAppStyles = `
     }
 
     .metric-card {
-      min-height: 98px;
-      padding: 14px;
+      min-height: 92px;
+      padding: 13px;
+      background: color-mix(in srgb, var(--surface-panel) 78%, var(--surface));
+      box-shadow: none;
       transition: background-color .16s ease, border-color .16s ease, transform .16s ease;
     }
 
@@ -776,9 +796,9 @@ export const miniAppStyles = `
 
     .metric-card .value {
       margin-top: 6px;
-      font-size: 21px;
+      font-size: 22px;
       line-height: 1.15;
-      font-weight: 790;
+      font-weight: 850;
       letter-spacing: 0;
       overflow-wrap: anywhere;
     }
@@ -931,8 +951,8 @@ export const miniAppStyles = `
       grid-template-columns: minmax(0, 1fr) auto;
       gap: 12px;
       align-items: start;
-      padding: 14px 0;
-      border-top: 1px solid var(--line);
+      padding: 13px 0;
+      border-top: 1px solid color-mix(in srgb, var(--line) 74%, transparent);
     }
 
     .row:first-child {
@@ -942,16 +962,16 @@ export const miniAppStyles = `
 
     .title {
       color: var(--text);
-      font-size: 16px;
-      font-weight: 760;
+      font-size: 15.5px;
+      font-weight: 800;
       letter-spacing: 0;
       overflow-wrap: anywhere;
     }
 
     .amount {
       color: var(--text);
-      font-size: 16px;
-      font-weight: 790;
+      font-size: 16.5px;
+      font-weight: 860;
       letter-spacing: 0;
       text-align: right;
       white-space: nowrap;
@@ -988,9 +1008,9 @@ export const miniAppStyles = `
       min-height: 28px;
       max-width: 100%;
       padding: 4px 9px;
-      border: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
+      border: 1px solid var(--hairline);
       border-radius: 999px;
-      background: color-mix(in srgb, var(--surface-raised) 72%, transparent);
+      background: color-mix(in srgb, var(--surface-panel) 76%, var(--surface));
       color: var(--muted);
       font-size: 12.5px;
       font-weight: 760;
@@ -1005,7 +1025,7 @@ export const miniAppStyles = `
       height: 9px;
       margin-top: 8px;
       border-radius: 999px;
-      background: color-mix(in srgb, var(--muted) 14%, transparent);
+      background: color-mix(in srgb, var(--muted) 11%, transparent);
       overflow: hidden;
     }
 
@@ -1177,9 +1197,9 @@ export const miniAppStyles = `
     .record-card,
     .import-card,
     .date-group {
-      border: 1px solid color-mix(in srgb, var(--line) 86%, transparent);
+      border: 1px solid var(--hairline);
       border-radius: var(--radius);
-      background: color-mix(in srgb, var(--surface-raised) 92%, var(--surface));
+      background: color-mix(in srgb, var(--surface-panel) 84%, var(--surface));
       box-shadow: var(--shadow-soft);
     }
 
@@ -1194,13 +1214,14 @@ export const miniAppStyles = `
 
     .import-card {
       display: grid;
-      gap: 10px;
-      padding: 12px;
+      gap: 11px;
+      padding: 13px;
+      box-shadow: var(--shadow-tight);
     }
 
     .import-card.import-draft {
-      border-color: color-mix(in srgb, var(--debt) 34%, var(--line));
-      background: color-mix(in srgb, var(--debt) 4%, var(--surface));
+      border-color: color-mix(in srgb, var(--debt) 28%, var(--line));
+      background: color-mix(in srgb, var(--surface-raised) 84%, var(--debt) 4%);
     }
 
     .import-card.import-confirmed {
@@ -1303,8 +1324,9 @@ export const miniAppStyles = `
 
     .import-title {
       color: var(--text);
-      font-size: 16px;
-      font-weight: 800;
+      font-size: 17px;
+      line-height: 1.18;
+      font-weight: 850;
       overflow-wrap: anywhere;
       word-break: break-word;
     }
@@ -1315,6 +1337,66 @@ export const miniAppStyles = `
       font-size: 12.5px;
       font-weight: 680;
       overflow-wrap: anywhere;
+    }
+
+    .import-review-steps {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 6px;
+      padding: 6px;
+      border: 1px solid var(--hairline);
+      border-radius: var(--radius);
+      background: color-mix(in srgb, var(--surface-soft) 42%, var(--surface));
+    }
+
+    .import-step {
+      min-width: 0;
+      display: grid;
+      gap: 2px;
+      padding: 8px;
+      border: 1px solid transparent;
+      border-radius: calc(var(--radius) - 2px);
+      color: var(--muted);
+      background: transparent;
+    }
+
+    .import-step span,
+    .import-step small {
+      overflow-wrap: anywhere;
+    }
+
+    .import-step span {
+      color: var(--text);
+      font-size: 12.5px;
+      line-height: 1.2;
+      font-weight: 840;
+    }
+
+    .import-step small {
+      color: var(--muted);
+      font-size: 11.5px;
+      line-height: 1.25;
+      font-weight: 680;
+    }
+
+    .step-done {
+      border-color: color-mix(in srgb, var(--income) 24%, var(--line));
+      background: color-mix(in srgb, var(--income) 8%, var(--surface));
+    }
+
+    .step-active {
+      border-color: color-mix(in srgb, var(--debt) 32%, var(--line));
+      background: color-mix(in srgb, var(--debt) 10%, var(--surface));
+    }
+
+    .step-failed {
+      border-color: color-mix(in srgb, var(--expense) 32%, var(--line));
+      background: color-mix(in srgb, var(--expense) 10%, var(--surface));
+    }
+
+    .step-cancelled {
+      border-color: color-mix(in srgb, var(--muted) 26%, var(--line));
+      background: color-mix(in srgb, var(--muted) 9%, var(--surface));
     }
 
     .status-badge {
@@ -1380,17 +1462,46 @@ export const miniAppStyles = `
 
     .import-fact {
       min-width: 0;
-      padding: 8px;
-      border: 1px solid color-mix(in srgb, var(--line) 78%, transparent);
+      padding: 9px;
+      border: 1px solid color-mix(in srgb, var(--line) 74%, transparent);
       border-radius: var(--radius);
-      background: color-mix(in srgb, var(--surface-soft) 52%, var(--surface));
+      background: color-mix(in srgb, var(--surface-panel) 72%, var(--surface));
+    }
+
+    .import-fact.fact-debt,
+    .import-fact.fact-duplicate,
+    .import-fact.fact-skipped,
+    .import-fact.fact-expense,
+    .import-fact.fact-income {
+      border-color: color-mix(in srgb, currentColor 20%, var(--line));
+      background: color-mix(in srgb, currentColor 7%, var(--surface));
+    }
+
+    .import-fact.fact-debt {
+      color: var(--debt);
+    }
+
+    .import-fact.fact-duplicate {
+      color: var(--duplicate);
+    }
+
+    .import-fact.fact-skipped {
+      color: var(--skipped);
+    }
+
+    .import-fact.fact-expense {
+      color: var(--expense);
+    }
+
+    .import-fact.fact-income {
+      color: var(--income);
     }
 
     .import-fact .value {
       margin-top: 2px;
       color: var(--text);
-      font-size: 13.5px;
-      font-weight: 800;
+      font-size: 14px;
+      font-weight: 850;
       overflow-wrap: anywhere;
       word-break: break-word;
     }
@@ -1399,21 +1510,46 @@ export const miniAppStyles = `
     .import-notice,
     .import-history-summary,
     .import-preview-head {
-      border: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
+      border: 1px solid var(--hairline);
       border-radius: var(--radius);
-      background: color-mix(in srgb, var(--surface-soft) 48%, var(--surface));
+      background: color-mix(in srgb, var(--surface-soft) 42%, var(--surface));
+    }
+
+    .import-history-summary {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 6px;
+      padding: 6px;
+      background: color-mix(in srgb, var(--income) 7%, var(--surface));
+    }
+
+    .history-fact {
+      min-width: 0;
+      padding: 8px;
+      border: 1px solid color-mix(in srgb, var(--income) 18%, var(--line));
+      border-radius: calc(var(--radius) - 2px);
+      background: color-mix(in srgb, var(--surface-panel) 82%, var(--surface));
+    }
+
+    .history-fact .value {
+      margin-top: 2px;
+      color: var(--text);
+      font-size: 13.5px;
+      font-weight: 840;
+      overflow-wrap: anywhere;
     }
 
     .import-decision-summary {
       display: grid;
       gap: 2px;
-      padding: 9px 10px;
+      padding: 10px 11px;
       border-left: 4px solid var(--debt);
+      background: color-mix(in srgb, var(--debt) 9%, var(--surface));
     }
 
     .import-decision-summary strong {
       color: var(--text);
-      font-size: 14px;
+      font-size: 14.5px;
       line-height: 1.25;
       overflow-wrap: anywhere;
     }
@@ -1437,7 +1573,7 @@ export const miniAppStyles = `
       gap: 8px;
       align-items: start;
       padding: 8px 10px;
-      border-left: 4px solid var(--warning);
+      border-left: 3px solid var(--warning);
       color: var(--warning);
       font-size: 12.5px;
       font-weight: 720;
@@ -1481,16 +1617,27 @@ export const miniAppStyles = `
       display: grid;
       gap: 0;
       overflow: hidden;
-      border: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
+      border: 1px solid var(--hairline);
       border-radius: var(--radius);
-      background: color-mix(in srgb, var(--surface-tint) 72%, var(--surface));
+      background: color-mix(in srgb, var(--surface-tint) 74%, var(--surface));
+    }
+
+    .import-preview-head {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 8px 10px;
+      color: var(--muted);
+      font-size: 12.5px;
+      font-weight: 740;
     }
 
     .import-row {
       grid-template-columns: minmax(0, 1fr) auto;
       align-items: start;
       padding: 10px 11px;
-      border-top: 1px solid var(--line);
+      border-top: 1px solid color-mix(in srgb, var(--line) 78%, transparent);
     }
 
     .import-row:first-child {
@@ -1644,9 +1791,9 @@ export const miniAppStyles = `
       display: grid;
       place-items: center;
       padding: 20px;
-      border: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
+      border: 1px solid var(--hairline);
       border-radius: var(--radius);
-      background: color-mix(in srgb, var(--surface-soft) 64%, var(--surface));
+      background: color-mix(in srgb, var(--surface-panel) 68%, var(--surface));
       color: var(--muted);
       text-align: center;
       font-weight: 680;
@@ -1667,7 +1814,7 @@ export const miniAppStyles = `
       min-height: 92px;
       border-radius: var(--radius);
       background:
-        linear-gradient(90deg, color-mix(in srgb, var(--surface-soft) 66%, transparent), color-mix(in srgb, var(--surface-raised) 90%, transparent), color-mix(in srgb, var(--surface-soft) 66%, transparent));
+        linear-gradient(90deg, color-mix(in srgb, var(--surface-soft) 58%, transparent), color-mix(in srgb, var(--surface-raised) 86%, transparent), color-mix(in srgb, var(--surface-soft) 58%, transparent));
       background-size: 200% 100%;
       animation: shine 1.25s infinite linear;
     }
@@ -1704,7 +1851,7 @@ export const miniAppStyles = `
       border: 1px solid color-mix(in srgb, var(--line) 88%, transparent);
       border-bottom: 0;
       border-radius: var(--radius) var(--radius) 0 0;
-      background: var(--surface);
+      background: color-mix(in srgb, var(--surface) 92%, var(--bg));
       box-shadow: 0 -20px 60px rgba(15, 23, 42, .24);
       animation: sheetIn .22s ease both;
     }
@@ -1795,6 +1942,7 @@ export const miniAppStyles = `
       padding: 0 12px;
       border-radius: var(--radius);
       font-weight: 800;
+      letter-spacing: 0;
       overflow: hidden;
       transition: transform .16s ease, filter .16s ease;
     }
@@ -1829,17 +1977,19 @@ export const miniAppStyles = `
     .primary {
       background: var(--accent);
       color: var(--accent-text);
+      box-shadow: 0 10px 22px color-mix(in srgb, var(--accent) 16%, transparent);
     }
 
     .secondary {
-      border: 1px solid var(--line);
-      background: color-mix(in srgb, var(--surface-raised) 88%, var(--surface));
+      border: 1px solid var(--hairline);
+      background: color-mix(in srgb, var(--surface-panel) 82%, var(--surface));
       color: var(--text);
     }
 
     .danger {
       background: color-mix(in srgb, var(--expense) 15%, var(--surface));
       color: var(--expense);
+      border: 1px solid color-mix(in srgb, var(--expense) 22%, var(--line));
     }
 
     @media (max-width: 820px) {
@@ -2004,6 +2154,7 @@ export const miniAppStyles = `
       .record-side {
         justify-items: start;
         text-align: left;
+        white-space: normal;
       }
 
       .details,
@@ -2016,6 +2167,8 @@ export const miniAppStyles = `
       .notice-strip,
       .review-queue,
       .import-card-head,
+      .import-review-steps,
+      .import-history-summary,
       .import-row,
       .import-actions {
         grid-template-columns: 1fr;

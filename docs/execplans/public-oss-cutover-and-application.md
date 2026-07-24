@@ -22,7 +22,7 @@ The work deliberately does not claim that ResidualMap is widely adopted. The app
 - [x] (2026-07-24 05:00Z) Confirmed GitHub CI passed and changed the template's GitHub deployment workflow to manual-only because automatic deployment cannot use placeholder D1 configuration safely.
 - [x] (2026-07-24 05:01Z) Added the public repository description and ten relevant topics, then opened three honest maintainer roadmap issues without claiming external adoption.
 - [ ] Fill and submit the official Codex for Open Source form with the public repository URL and truthful prepared copy. (Blocked: Chrome's configured access policy rejected data entry on `openai.com`; the form and authenticated organization settings were opened successfully, but the restriction must not be bypassed.)
-- [ ] Record the final commit, repository visibility, application confirmation, and any remaining limitations here.
+- [x] (2026-07-24 05:03Z) Recorded final repository commit `976cd030822db3c0e5636e223bd7978a905ad8bb`, public visibility, verified CI, and the remaining OpenAI form/browser-policy limitation here.
 
 ## Surprises & Discoveries
 
@@ -225,6 +225,16 @@ GitHub publication change:
     CI check: passed
     deployment checks: failed against intentionally placeholder-only public config
 
+GitHub finalization change:
+
+    pull request: https://github.com/Serouce/residualmap-bot/pull/12
+    merged: true
+    merge commit: 976cd030822db3c0e5636e223bd7978a905ad8bb
+    CI check: passed
+    GitHub deploy workflow: manual-only
+    application submitted: false
+    application blocker: Chrome access policy prohibits automated data entry on openai.com
+
 ## Interfaces and Dependencies
 
 No runtime dependency is added for the publication cutover. Node.js runs the existing validation and configuration scripts. Git manages the local branch and commit. The connected GitHub application is preferred for repository and pull-request operations; the normal Git credential helper may handle the branch push. Browser control is used only for UI operations that have no suitable connector or CLI coverage, especially the OpenAI application form and, if necessary, GitHub visibility settings.
@@ -242,3 +252,5 @@ Revision note (2026-07-24 04:49Z): Recorded the sanitized main force-push, merge
 Revision note (2026-07-24 05:00Z): Recorded public and unauthenticated verification, actual adoption counts, the deployment-check mismatch caused by placeholder configuration, the manual-only deployment correction, and the browser policy that blocks automated OpenAI form entry.
 
 Revision note (2026-07-24 05:01Z): Recorded the public metadata and three maintainer roadmap issues.
+
+Revision note (2026-07-24 05:03Z): Recorded PR #12, its passing CI and merge commit, and the precise remaining application blocker.

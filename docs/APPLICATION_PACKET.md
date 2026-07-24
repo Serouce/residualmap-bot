@@ -4,8 +4,8 @@ This packet is the operational checklist for applying to OpenAI's Codex for Open
 
 ## Pre-application checks
 
-- Current known blocker: `Serouce/residualmap-bot` was still private when checked on 2026-06-08. Make it public before submitting the form.
-- Current known blocker: `wrangler.toml` still contains deployment-specific values. Complete `docs/PUBLICATION_RUNBOOK.md` and `docs/PUBLISHING_CHECKLIST.md` before making the repository public.
+- Final publication gate: immediately before submitting, verify that `Serouce/residualmap-bot` is public and readable without GitHub authentication.
+- Template-safety gate: immediately before changing visibility, verify that `wrangler.toml` contains the same reusable placeholders as `wrangler.example.toml`.
 - GitHub profile is public.
 - Repository is public.
 - `README.md` presents ResidualMap as a self-hosted OSS template, not a hosted SaaS.

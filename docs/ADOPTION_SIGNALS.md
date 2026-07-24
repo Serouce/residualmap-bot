@@ -61,10 +61,10 @@ Keep this table current before submitting the application.
 
 | Signal | Current value | Evidence link or note |
 | --- | --- | --- |
-| Repository visibility | Private until changed | Check GitHub repository settings |
-| Public stars | 0 until public | GitHub repository page |
-| Public forks | 0 until public | GitHub repository page |
-| Public issues opened by maintainer | 0 until public | Issues page |
+| Repository visibility | Pending final external verification | Verify the public page without GitHub authentication before submission |
+| Public stars | Do not claim until verified | GitHub repository page |
+| Public forks | Do not claim until verified | GitHub repository page |
+| Public issues opened by maintainer | Do not claim until verified | Issues page |
 | External issues or comments | 0 until real feedback | Link only public safe feedback |
 | External self-host attempt | 0 until confirmed | Public issue/discussion or private note |
 | External PRs | 0 until real PRs | Pull requests page |
@@ -114,4 +114,3 @@ Do not submit yet if:
 - "users" when only the maintainer uses it
 - "guaranteed approval"
 - "OpenAI stores no data" without the precise API/data-flow context
-

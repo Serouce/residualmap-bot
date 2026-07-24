@@ -21,8 +21,8 @@ The work deliberately does not claim that ResidualMap is widely adopted. The app
 - [x] (2026-07-24 04:54Z) Changed only `Serouce/residualmap-bot` from private to public and verified the README, MIT license, branch, and zero-star/zero-fork counts in a logged-out browser.
 - [x] (2026-07-24 05:00Z) Confirmed GitHub CI passed and changed the template's GitHub deployment workflow to manual-only because automatic deployment cannot use placeholder D1 configuration safely.
 - [x] (2026-07-24 05:01Z) Added the public repository description and ten relevant topics, then opened three honest maintainer roadmap issues without claiming external adoption.
-- [ ] Fill and submit the official Codex for Open Source form with the public repository URL and truthful prepared copy. (Blocked: Chrome's configured access policy rejected data entry on `openai.com`; the form and authenticated organization settings were opened successfully, but the restriction must not be bypassed.)
-- [x] (2026-07-24 05:03Z) Recorded final repository commit `976cd030822db3c0e5636e223bd7978a905ad8bb`, public visibility, verified CI, and the remaining OpenAI form/browser-policy limitation here.
+- [x] (2026-07-24 05:11Z) Submitted the official Codex for Open Source form as primary maintainer with the public repository URL, honest early-stage wording, and interest in Codex Security and project API credits; the page displayed an explicit thank-you confirmation.
+- [x] (2026-07-24 05:03Z) Recorded repository commit `976cd030822db3c0e5636e223bd7978a905ad8bb`, public visibility, and verified CI before the application submission.
 
 ## Surprises & Discoveries
 
@@ -81,7 +81,7 @@ The repository is public, template-safe, and readable without GitHub authenticat
 
 The repository has a concise public description, ten relevant discovery topics, and three maintainer-authored roadmap issues: [#9](https://github.com/Serouce/residualmap-bot/issues/9), [#10](https://github.com/Serouce/residualmap-bot/issues/10), and [#11](https://github.com/Serouce/residualmap-bot/issues/11). These are real planned tasks, not evidence of external adoption.
 
-The application has not been submitted. The official form and the authenticated OpenAI organization settings were reached, but Chrome's configured access policy prohibited automated data entry on `openai.com`. No alternate browser or workaround was attempted.
+The application was submitted successfully after the owner allowed `openai.com` in the desktop app's website-access settings. It identifies the applicant as primary maintainer, requests consideration for Codex Security and project API credits, uses the authenticated OpenAI organization ID, and retains the honest statement that the repository is an early public template without broad adoption. The OpenAI page displayed: “Спасибо за вашу заявку! Мы рассмотрим все заявки и свяжемся с вами, если вас выберут. Мы ценим ваш интерес.”
 
 ## Context and Orientation
 
@@ -232,8 +232,10 @@ GitHub finalization change:
     merge commit: 976cd030822db3c0e5636e223bd7978a905ad8bb
     CI check: passed
     GitHub deploy workflow: manual-only
-    application submitted: false
-    application blocker: Chrome access policy prohibits automated data entry on openai.com
+    application submitted: true
+    submission confirmation: explicit thank-you message displayed by the official OpenAI form
+    interests selected: Codex Security and project API credits
+    maintainer role: primary maintainer
 
 ## Interfaces and Dependencies
 
@@ -254,3 +256,5 @@ Revision note (2026-07-24 05:00Z): Recorded public and unauthenticated verificat
 Revision note (2026-07-24 05:01Z): Recorded the public metadata and three maintainer roadmap issues.
 
 Revision note (2026-07-24 05:03Z): Recorded PR #12, its passing CI and merge commit, and the precise remaining application blocker.
+
+Revision note (2026-07-24 05:11Z): Recorded the resolved website-access gate and the confirmed Codex for Open Source submission.

@@ -61,30 +61,30 @@ Keep this table current before submitting the application.
 
 | Signal | Current value | Evidence link or note |
 | --- | --- | --- |
-| Repository visibility | Pending final external verification | Verify the public page without GitHub authentication before submission |
-| Public stars | Do not claim until verified | GitHub repository page |
-| Public forks | Do not claim until verified | GitHub repository page |
-| Public issues opened by maintainer | Do not claim until verified | Issues page |
+| Repository visibility | Public and verified without authentication | `https://github.com/Serouce/residualmap-bot` |
+| Public stars | 0 | GitHub repository page, checked 2026-07-24 |
+| Public forks | 0 | GitHub repository page, checked 2026-07-24 |
+| Public issues opened by maintainer | 3 | [#9](https://github.com/Serouce/residualmap-bot/issues/9), [#10](https://github.com/Serouce/residualmap-bot/issues/10), [#11](https://github.com/Serouce/residualmap-bot/issues/11) |
 | External issues or comments | 0 until real feedback | Link only public safe feedback |
 | External self-host attempt | 0 until confirmed | Public issue/discussion or private note |
 | External PRs | 0 until real PRs | Pull requests page |
 | Demo assets | Synthetic SVG mockups present | `docs/assets/` |
-| CI status | Local checks pass | GitHub Actions after public push |
+| CI status | GitHub CI passed; automatic deployment checks failed against intentionally placeholder-only public config | CI run for `2cef1f1`; deployment is being changed to manual-only for the public template |
 
 ## Go/No-Go For Application
 
-Submit when all of these are true:
+The strongest submission has all of these:
 
 - GitHub profile is public.
 - Repository is public.
 - Public branch has template-safe `wrangler.toml`.
 - README, privacy, security, deployment, architecture, and maintainer docs are present.
 - CI is visible and passing.
-- At least 3 public issues show active maintainer work.
 - Application form text is honest about early-stage adoption.
 
 Better but not mandatory:
 
+- At least 3 public issues show active maintainer work.
 - 1-3 stars or forks.
 - One external comment about setup clarity.
 - One issue opened from real feedback.

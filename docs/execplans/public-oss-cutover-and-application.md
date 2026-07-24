@@ -17,9 +17,11 @@ The work deliberately does not claim that ResidualMap is widely adopted. The app
 - [x] (2026-07-24 04:42Z) Replaced stale private-repository blocker text with final verification gates without inventing users or adoption.
 - [x] (2026-07-24 04:47Z) Audited the current tree and public-bound Git refs, found one historical personal Telegram ID, rewrote the affected history, and confirmed zero remaining sensitive/deployment-pattern matches and zero private paths.
 - [x] (2026-07-24 04:47Z) Ran syntax checks, 58 tests, public-readiness checks, application-copy checks, and `git diff --check`; every check passed.
-- [ ] Commit the intended publication changes, push the branch, review the exact diff, and merge it into `main`.
-- [ ] Change only `Serouce/residualmap-bot` from private to public and verify the repository from an unauthenticated view.
-- [ ] Fill and submit the official Codex for Open Source form with the public repository URL and truthful prepared copy.
+- [x] (2026-07-24 04:49Z) Force-pushed the sanitized private `main` with an exact lease, pushed the cutover branch, reviewed PR #8, and squash-merged it as `2cef1f1e1348e0565d68ecaffce9e7576676fe44`.
+- [x] (2026-07-24 04:54Z) Changed only `Serouce/residualmap-bot` from private to public and verified the README, MIT license, branch, and zero-star/zero-fork counts in a logged-out browser.
+- [x] (2026-07-24 05:00Z) Confirmed GitHub CI passed and changed the template's GitHub deployment workflow to manual-only because automatic deployment cannot use placeholder D1 configuration safely.
+- [x] (2026-07-24 05:01Z) Added the public repository description and ten relevant topics, then opened three honest maintainer roadmap issues without claiming external adoption.
+- [ ] Fill and submit the official Codex for Open Source form with the public repository URL and truthful prepared copy. (Blocked: Chrome's configured access policy rejected data entry on `openai.com`; the form and authenticated organization settings were opened successfully, but the restriction must not be bypassed.)
 - [ ] Record the final commit, repository visibility, application confirmation, and any remaining limitations here.
 
 ## Surprises & Discoveries
@@ -41,6 +43,15 @@ The work deliberately does not claim that ResidualMap is widely adopted. The app
 
 - Observation: The isolated `git-filter-repo` rewrite preserved the 33-commit `main` history and added the publication commit as commit 34 on the cutover branch.
   Evidence: The post-rewrite audit scanned 34 unique commits reachable from the public-bound refs and returned `POST_REWRITE_SENSITIVE_PATH_MATCH_COUNT=0` and `POST_REWRITE_PRIVATE_PATH_COUNT=0`.
+
+- Observation: GitHub requires a fresh sudo-mode identity confirmation for the visibility change even though the Chrome session is signed in as `@Serouce`.
+  Evidence: The final “Make this repository public” action redirected to “Confirm access” with GitHub Mobile or an emailed code. No visibility change occurred before this gate.
+
+- Observation: The public commit has one successful CI check and two failed deployment checks.
+  Evidence: `CI / check (push)` passed. The GitHub deploy workflow failed while applying D1 migrations, and the connected Cloudflare Workers Build also failed, because the public `wrangler.toml` now deliberately contains a placeholder D1 identifier. A reusable public template must not deploy on every push to `main`, so the GitHub deploy workflow is now manual-only.
+
+- Observation: The official OpenAI application page and the authenticated OpenAI organization settings are reachable, but automated form entry is prohibited by the user's current Chrome access policy for `openai.com`.
+  Evidence: Browser control returned an explicit policy rejection and instructed the agent not to retry through another browser surface or indirect method.
 
 ## Decision Log
 
@@ -66,7 +77,11 @@ The work deliberately does not claim that ResidualMap is widely adopted. The app
 
 ## Outcomes & Retrospective
 
-Work is in progress. The repository remains private until the audit, merge, and unauthenticated verification are complete. The application has not yet been submitted.
+The repository is public, template-safe, and readable without GitHub authentication. The public README and MIT license render correctly, GitHub reports zero stars and zero forks, and the repository CI check passes. The automatic deployment checks on the publication commit failed because they attempted to deploy placeholder-only public configuration; the GitHub deployment workflow is now manual-only, while the external Cloudflare Workers Build integration still needs to be disabled or reconfigured separately if the owner wants a fully green commit status.
+
+The repository has a concise public description, ten relevant discovery topics, and three maintainer-authored roadmap issues: [#9](https://github.com/Serouce/residualmap-bot/issues/9), [#10](https://github.com/Serouce/residualmap-bot/issues/10), and [#11](https://github.com/Serouce/residualmap-bot/issues/11). These are real planned tasks, not evidence of external adoption.
+
+The application has not been submitted. The official form and the authenticated OpenAI organization settings were reached, but Chrome's configured access policy prohibited automated data entry on `openai.com`. No alternate browser or workaround was attempted.
 
 ## Context and Orientation
 
@@ -197,6 +212,19 @@ Post-rewrite validation:
     Public readiness check passed.
     Application packet check passed.
 
+GitHub publication change:
+
+    pull request: https://github.com/Serouce/residualmap-bot/pull/8
+    merged: true
+    merge commit: 2cef1f1e1348e0565d68ecaffce9e7576676fe44
+    visibility: public
+    unauthenticated README: verified
+    license: MIT, visible publicly
+    stars: 0
+    forks: 0
+    CI check: passed
+    deployment checks: failed against intentionally placeholder-only public config
+
 ## Interfaces and Dependencies
 
 No runtime dependency is added for the publication cutover. Node.js runs the existing validation and configuration scripts. Git manages the local branch and commit. The connected GitHub application is preferred for repository and pull-request operations; the normal Git credential helper may handle the branch push. Browser control is used only for UI operations that have no suitable connector or CLI coverage, especially the OpenAI application form and, if necessary, GitHub visibility settings.
@@ -208,3 +236,9 @@ Revision note (2026-07-24 04:42Z): Recorded the actual `codex/` branch name, the
 Revision note (2026-07-24 04:48Z): Recorded the classified historical Telegram ID finding and selected a recoverable, regex-based history rewrite after a verified Git bundle.
 
 Revision note (2026-07-24 04:47Z): Recorded the verified recovery bundle, completed history rewrite, zero-match post-rewrite audit, and passing validation.
+
+Revision note (2026-07-24 04:49Z): Recorded the sanitized main force-push, merged publication PR, and the GitHub sudo-mode confirmation gate that currently blocks the visibility change.
+
+Revision note (2026-07-24 05:00Z): Recorded public and unauthenticated verification, actual adoption counts, the deployment-check mismatch caused by placeholder configuration, the manual-only deployment correction, and the browser policy that blocks automated OpenAI form entry.
+
+Revision note (2026-07-24 05:01Z): Recorded the public metadata and three maintainer roadmap issues.

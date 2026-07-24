@@ -15,8 +15,8 @@ The work deliberately does not claim that ResidualMap is widely adopted. The app
 - [x] (2026-07-24 04:40Z) Confirmed that `npm.cmd run check` passes with 58 tests while `npm.cmd run check:public` fails only for the concrete Worker URL and D1 database ID.
 - [x] (2026-07-24 04:42Z) Created `codex/public-oss-cutover` and replaced the production Worker URL and D1 identifier with public placeholders.
 - [x] (2026-07-24 04:42Z) Replaced stale private-repository blocker text with final verification gates without inventing users or adoption.
-- [ ] Audit the current tree and all reachable Git history for credentials, personal Telegram IDs, private keys, and private environment files without printing any secret values. (Completed: no token, API key, private key, or private env file found; one personal Telegram ID was found in old `wrangler.toml` blobs. Remaining: rewrite and repeat the audit.)
-- [ ] Run syntax checks, 58 or more tests, public-readiness checks, application-copy checks, and `git diff --check`.
+- [x] (2026-07-24 04:47Z) Audited the current tree and public-bound Git refs, found one historical personal Telegram ID, rewrote the affected history, and confirmed zero remaining sensitive/deployment-pattern matches and zero private paths.
+- [x] (2026-07-24 04:47Z) Ran syntax checks, 58 tests, public-readiness checks, application-copy checks, and `git diff --check`; every check passed.
 - [ ] Commit the intended publication changes, push the branch, review the exact diff, and merge it into `main`.
 - [ ] Change only `Serouce/residualmap-bot` from private to public and verify the repository from an unauthenticated view.
 - [ ] Fill and submit the official Codex for Open Source form with the public repository URL and truthful prepared copy.
@@ -38,6 +38,9 @@ The work deliberately does not claim that ResidualMap is widely adopted. The app
 
 - Observation: `git filter-repo` is not installed in the current toolchain.
   Evidence: Git returned “'filter-repo' is not a git command.” A temporary isolated installation is preferable to the legacy `git filter-branch` for content replacement across 33 commits.
+
+- Observation: The isolated `git-filter-repo` rewrite preserved the 33-commit `main` history and added the publication commit as commit 34 on the cutover branch.
+  Evidence: The post-rewrite audit scanned 34 unique commits reachable from the public-bound refs and returned `POST_REWRITE_SENSITIVE_PATH_MATCH_COUNT=0` and `POST_REWRITE_PRIVATE_PATH_COUNT=0`.
 
 ## Decision Log
 
@@ -145,7 +148,11 @@ The application acceptance gate is:
 
 The dry-run config command and all check commands are safe to repeat. If the applied config needs to be retried before commit, rerun the same script; it recognizes already-safe placeholder values.
 
-Before any Git history rewrite, create a local recovery bundle in a temporary directory and record its path in this plan. Do not force-push or delete the existing remote branch unless a history finding makes it necessary and the exact recovery path has been verified. If no credential-shaped history is found, no history rewrite is needed for authentication safety.
+Before any Git history rewrite, create a local recovery bundle in a temporary directory and record its path in this plan. The verified pre-rewrite bundle is:
+
+    C:\Users\GIS\AppData\Local\Temp\residualmap-public-backup-a02f4a6091d4418395dba3673d4e16a5\residualmap-before-public-history-rewrite.bundle
+
+`git bundle verify` reported that it records a complete history and is okay. Do not remove this bundle during the publication workflow. If a remote force-push or later verification fails, recover the original refs from this bundle.
 
 If pushing through the normal Git credential helper fails, do not paste tokens into commands or logs. Use the connected GitHub application for supported operations or complete an interactive GitHub authentication flow. If the OpenAI form requires account details that cannot be discovered from the authenticated session, stop at the filled form and request only the missing value rather than guessing.
 
@@ -174,6 +181,22 @@ Initial GitHub metadata:
     visibility: private
     connected permissions: admin, maintain, push, triage
 
+Post-rewrite audit:
+
+    PUBLIC_REACHABLE_COMMIT_COUNT=34
+    POST_REWRITE_SENSITIVE_PATH_MATCH_COUNT=0
+    POST_REWRITE_PRIVATE_PATH_COUNT=0
+    MAIN_COMMIT_COUNT=33
+    CUTOVER_COMMIT_COUNT=34
+
+Post-rewrite validation:
+
+    tests 58
+    pass 58
+    fail 0
+    Public readiness check passed.
+    Application packet check passed.
+
 ## Interfaces and Dependencies
 
 No runtime dependency is added for the publication cutover. Node.js runs the existing validation and configuration scripts. Git manages the local branch and commit. The connected GitHub application is preferred for repository and pull-request operations; the normal Git credential helper may handle the branch push. Browser control is used only for UI operations that have no suitable connector or CLI coverage, especially the OpenAI application form and, if necessary, GitHub visibility settings.
@@ -183,3 +206,5 @@ Revision note (2026-07-24 04:40Z): Created the initial self-contained plan after
 Revision note (2026-07-24 04:42Z): Recorded the actual `codex/` branch name, the successful two-value config cutover, and neutral final-verification language in the application evidence files.
 
 Revision note (2026-07-24 04:48Z): Recorded the classified historical Telegram ID finding and selected a recoverable, regex-based history rewrite after a verified Git bundle.
+
+Revision note (2026-07-24 04:47Z): Recorded the verified recovery bundle, completed history rewrite, zero-match post-rewrite audit, and passing validation.

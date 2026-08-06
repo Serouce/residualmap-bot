@@ -36,6 +36,6 @@
     "prepare:public-config": "node scripts/prepare-public-config.mjs"
   },
   "devDependencies": {
-    "wrangler": "4.34.0"
+    "wrangler": "4.118.0"
   }
 }
